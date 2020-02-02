@@ -262,7 +262,7 @@ public class Database {
 	}
 
 
-	public Set<String> getLinkIds(Table entity, Class<Table> type) {
+	public Set<String> getLinkIds(Table entity, Class<? extends Table> type) {
 		return Collections.unmodifiableSet(entity.getLinks().get(DynamoDbImpl.table(type)));
 	}
 	
