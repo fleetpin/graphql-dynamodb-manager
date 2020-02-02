@@ -1,13 +1,13 @@
-package com.fleetpin.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager;
 
 import java.util.concurrent.ExecutionException;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fleetpin.dynamodb.manager.GlobalIndex;
-import com.fleetpin.dynamodb.manager.SecondaryIndex;
-import com.fleetpin.dynamodb.manager.Table;
+import com.fleetpin.graphql.dynamodb.manager.GlobalIndex;
+import com.fleetpin.graphql.dynamodb.manager.SecondaryIndex;
+import com.fleetpin.graphql.dynamodb.manager.Table;
 
 public class DynamoDBIndexesTest extends DynamoDBBase {
 

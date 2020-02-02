@@ -1,9 +1,10 @@
-package com.fleetpin.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
@@ -25,17 +26,24 @@ public class DynamoDbManager {
 	private final ObjectMapper mapper;
 	private final Supplier<String> idGenerator;
 	private final DynamoDb dynamoDb;
+	private final DynamoDbAsyncClient client;
 	
 	
-	private DynamoDbManager(ObjectMapper mapper, Supplier<String> idGenerator, DynamoDb dynamoDb) {
+	private DynamoDbManager(ObjectMapper mapper, Supplier<String> idGenerator, DynamoDbAsyncClient client, DynamoDb dynamoDb) {
 		super();
 		this.mapper = mapper;
 		this.idGenerator = idGenerator;
 		this.dynamoDb = dynamoDb;
+		this.client = client;
 	}
 	
 	public Database getDatabase(String organisationId) {
-		return new Database(mapper, organisationId, dynamoDb);
+		return getDatabase(organisationId, __ -> CompletableFuture.completedFuture(true));
+	}
+	
+	
+	public Database getDatabase(String organisationId, PutPermission putAllow) {
+		return new Database(mapper, organisationId, dynamoDb, putAllow);
 	}
 	
 	
@@ -96,7 +104,7 @@ public class DynamoDbManager {
 				idGenerator = () -> UUID.randomUUID().toString();
 			}
 			
-			return new DynamoDbManager(mapper, idGenerator, new DynamoDbImpl(mapper, tables, client, idGenerator));
+			return new DynamoDbManager(mapper, idGenerator, client, new DynamoDbImpl(mapper, tables, client, idGenerator));
 			
 		}
 		
@@ -121,6 +129,10 @@ public class DynamoDbManager {
 		return TableUtil.toAttributes(mapper, entity);
 	}	
 	
+	
+	public DynamoDbAsyncClient getDynamoDbAsyncClient() {
+		return client;
+	}
 
 	
 }

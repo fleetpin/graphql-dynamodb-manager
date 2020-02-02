@@ -1,4 +1,4 @@
-package com.fleetpin.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager;
 
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
@@ -8,8 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
-import com.fleetpin.dynamodb.manager.Table;
-import com.fleetpin.dynamodb.manager.TableName;
+import com.fleetpin.graphql.dynamodb.manager.Table;
+import com.fleetpin.graphql.dynamodb.manager.TableName;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 public class DynamoDBInheritanceTest extends DynamoDBBase {

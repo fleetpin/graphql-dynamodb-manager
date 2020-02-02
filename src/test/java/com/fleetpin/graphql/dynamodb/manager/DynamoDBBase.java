@@ -1,4 +1,4 @@
-package com.fleetpin.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager;
 
 import java.net.ServerSocket;
 import java.net.URI;

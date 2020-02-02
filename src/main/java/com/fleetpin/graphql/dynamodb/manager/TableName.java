@@ -1,4 +1,4 @@
-package com.fleetpin.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager;
 
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 

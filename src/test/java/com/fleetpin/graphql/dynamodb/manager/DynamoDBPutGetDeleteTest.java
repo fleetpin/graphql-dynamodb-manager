@@ -1,11 +1,11 @@
-package com.fleetpin.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager;
 
 import java.util.concurrent.ExecutionException;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fleetpin.dynamodb.manager.Table;
+import com.fleetpin.graphql.dynamodb.manager.Table;
 
 public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 

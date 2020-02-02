@@ -1,16 +1,16 @@
-package com.fleetpin.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -18,8 +18,6 @@ import org.dataloader.DataLoader;
 import org.dataloader.DataLoaderOptions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class Database {
 
@@ -31,10 +29,13 @@ public class Database {
 	private final DataLoader<DatabaseKey, DynamoItem> items;
 	private final DataLoader<DatabaseQueryKey, List<DynamoItem>> queries;
 
-	Database(ObjectMapper mapper, String organisationId, DynamoDb dynamo) {
+	private final Function<Table, CompletableFuture<Boolean>> putAllow;
+	
+	Database(ObjectMapper mapper, String organisationId, DynamoDb dynamo, PutPermission putAllow) {
 		this.mapper = mapper;
 		this.organisationId = organisationId;
 		this.dynamo = dynamo;
+		this.putAllow = putAllow;
 
 		items = new DataLoader<DatabaseKey, DynamoItem>(keys -> {
 			return dynamo.get(keys);
@@ -106,18 +107,24 @@ public class Database {
 	}
 
 	public <T extends Table> CompletableFuture<T> delete(T entity, boolean deleteLinks) {
-		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
-		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
-		
-		if(deleteLinks) {
-			return deleteLinks(entity).thenCompose(t -> dynamo.delete(organisationId, entity));
-		}else {
+		if(!deleteLinks) {
 			if(!entity.getLinks().isEmpty()) {
 				throw new RuntimeException("deleting would leave dangling links");
 			}
 		}
-		
-		return dynamo.delete(organisationId, entity);
+		return putAllow.apply(entity).thenCompose(allow -> {
+			if(!allow) {
+				throw new ForbiddenWriteException("Delete not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+			}
+    		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
+    		
+    		if(deleteLinks) {
+    			return deleteLinks(entity).thenCompose(t -> dynamo.delete(organisationId, entity));
+    		}
+    		
+    		return dynamo.delete(organisationId, entity);
+		});
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> getLinks(Table entry, Class<T> type) {
@@ -141,18 +148,33 @@ public class Database {
 	}
 
 	public <T extends Table> CompletableFuture<T> deleteLinks(T entity) {
-		return dynamo.deleteLinks(organisationId, entity).thenCompose(t -> put(entity));
+		return putAllow.apply(entity).thenCompose(allow -> {
+			if(!allow) {
+				throw new ForbiddenWriteException("Delete links not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+			}
+			return dynamo.deleteLinks(organisationId, entity).thenCompose(t -> put(entity));
+		});
 	}
 
 	public <T extends Table> CompletableFuture<T> put(T entity) {
-		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
-		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
-		return dynamo.put(organisationId, entity);
+		return putAllow.apply(entity).thenCompose(allow -> {
+			if(!allow) {
+				throw new ForbiddenWriteException("put not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+			}
+    		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
+    		return dynamo.put(organisationId, entity);
+		});
 	}
 	public <T extends Table> CompletableFuture<T> putGlobal(T entity) {
-		items.clear(new DatabaseKey("global", entity.getClass(), entity.getId()));
-		queries.clear(new DatabaseQueryKey("global", entity.getClass()));
-		return dynamo.put("global", entity);
+		return putAllow.apply(entity).thenCompose(allow -> {
+			if(!allow) {
+				throw new ForbiddenWriteException("put global not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+			}
+    		items.clear(new DatabaseKey("global", entity.getClass(), entity.getId()));
+    		queries.clear(new DatabaseQueryKey("global", entity.getClass()));
+    		return dynamo.put("global", entity);
+		});
 		
 	}
 
@@ -192,22 +214,27 @@ public class Database {
 	}
 
 
-	public <T extends Table> CompletableFuture<T> links(T entity, Class<? extends Table> class1, List<String> groupIds) {
-		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
-		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
-		for(String id: groupIds) {
-			items.clear(new DatabaseKey(organisationId, class1, id));
-		}
-		queries.clear(new DatabaseQueryKey(organisationId, class1));
-		return dynamo.link(organisationId, entity, class1, groupIds);
+	public <T extends Table> CompletableFuture<T> links(T entity, Class<? extends Table> class1, List<String> targetIds) {
+		return putAllow.apply(entity).thenCompose(allow -> {
+			if(!allow) {
+				throw new ForbiddenWriteException("Link not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+			}
+    		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
+    		for(String id: targetIds) {
+    			items.clear(new DatabaseKey(organisationId, class1, id));
+    		}
+    		queries.clear(new DatabaseQueryKey(organisationId, class1));
+    		return dynamo.link(organisationId, entity, class1, targetIds);
+		});
 	}
 
 
-	public <T extends Table> CompletableFuture<T> link(T entity, Class<? extends Table> class1, String groupIds) {
-		if(groupIds == null) {
+	public <T extends Table> CompletableFuture<T> link(T entity, Class<? extends Table> class1, String targetId) {
+		if(targetId == null) {
 			return links(entity, class1, Collections.emptyList());	
 		}else {
-			return links(entity, class1, Arrays.asList(groupIds));
+			return links(entity, class1, Arrays.asList(targetId));
 		}
 	}
 	
