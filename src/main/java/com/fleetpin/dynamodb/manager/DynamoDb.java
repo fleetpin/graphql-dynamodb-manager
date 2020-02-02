@@ -21,5 +21,6 @@ public interface DynamoDb {
 	public CompletableFuture<List<DynamoItem>> querySecondary(Class<? extends Table> type, String organisationId, String value);
 	public <T extends Table> CompletableFuture<T> link(String organisationId, T entry, Class<? extends Table> class1, List<String> groupIds);
 	public int maxBatchSize();
+	public String newId();
 
 }

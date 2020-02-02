@@ -431,4 +431,8 @@ public class DynamoDbImpl implements DynamoDb {
 		}
 	}
 
+	@Override
+	public String newId() {
+		return idGenerator.get();
+	}
 }

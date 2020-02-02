@@ -2,11 +2,12 @@ package com.fleetpin.dynamodb.manager;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -16,17 +17,20 @@ import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.google.common.base.Preconditions;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class DynamoDbManager {
 
 	
 	private final ObjectMapper mapper;
+	private final Supplier<String> idGenerator;
 	private final DynamoDb dynamoDb;
 	
 	
-	private DynamoDbManager(ObjectMapper mapper, DynamoDb dynamoDb) {
+	private DynamoDbManager(ObjectMapper mapper, Supplier<String> idGenerator, DynamoDb dynamoDb) {
 		super();
 		this.mapper = mapper;
+		this.idGenerator = idGenerator;
 		this.dynamoDb = dynamoDb;
 	}
 	
@@ -92,7 +96,7 @@ public class DynamoDbManager {
 				idGenerator = () -> UUID.randomUUID().toString();
 			}
 			
-			return new DynamoDbManager(mapper, new DynamoDbImpl(mapper, tables, client, idGenerator));
+			return new DynamoDbManager(mapper, idGenerator, new DynamoDbImpl(mapper, tables, client, idGenerator));
 			
 		}
 		
@@ -101,6 +105,21 @@ public class DynamoDbManager {
 	public ObjectMapper getMapper() {
 		return mapper;
 	}
+	
+	public String newId() {
+		return idGenerator.get();
+	}
+	
+	public <T> T convertTo(Map<String, AttributeValue> item, Class<T> type) {
+		return TableUtil.convertTo(mapper, item, type);
+	}
+	public <T> T convertTo(AttributeValue item, Class<T> type) {
+		return TableUtil.convertTo(mapper, item, type);
+	}
+
+	public AttributeValue toAttributes(Object entity) {
+		return TableUtil.toAttributes(mapper, entity);
+	}	
 	
 
 	

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -17,6 +18,8 @@ import org.dataloader.DataLoader;
 import org.dataloader.DataLoaderOptions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class Database {
 
@@ -226,6 +229,8 @@ public class Database {
 		return table.getSourceOrganistaionId();
 	}
 
-
+	public String newId() {
+		return dynamo.newId();
+	}
 	
 }
