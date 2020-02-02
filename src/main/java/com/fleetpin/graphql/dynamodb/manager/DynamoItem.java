@@ -14,7 +14,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 	private final Map<String, AttributeValue> item;
 	private final String id;
 
-	private final Multimap<String, String> links;
+	private final HashMultimap<String, String> links;
 
 	DynamoItem(String table, Map<String, AttributeValue> item) {
 		this.table = table;

@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -258,6 +259,11 @@ public class Database {
 
 	public String newId() {
 		return dynamo.newId();
+	}
+
+
+	public Set<String> getLinkIds(Table entity, Class<Table> type) {
+		return Collections.unmodifiableSet(entity.getLinks().get(DynamoDbImpl.table(type)));
 	}
 	
 }

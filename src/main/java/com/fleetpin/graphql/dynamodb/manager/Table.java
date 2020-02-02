@@ -17,7 +17,7 @@ public abstract class Table {
 	private Instant updatedAt;
 	private String sourceTable;
 	private String sourceOrganistaionId;
-	private Multimap<String, String> links = HashMultimap.create();
+	private HashMultimap<String, String> links = HashMultimap.create();
 	
 	@Id
 	public String getId() {
@@ -64,7 +64,7 @@ public abstract class Table {
 	String getSourceTable() {
 		return sourceTable;
 	}
-	void setSource(String sourceTable, Multimap<String, String> links, String sourceOrganisationId) {
+	void setSource(String sourceTable, HashMultimap<String, String> links, String sourceOrganisationId) {
 		//so bad data does not cause error
 		if(createdAt == null) {
 			createdAt = Instant.MIN;
@@ -90,7 +90,7 @@ public abstract class Table {
 	
 	@JsonIgnore
 	@GraphQLIgnore
-	Multimap<String, String> getLinks() {
+	HashMultimap<String, String> getLinks() {
 		return links;
 	}
 
