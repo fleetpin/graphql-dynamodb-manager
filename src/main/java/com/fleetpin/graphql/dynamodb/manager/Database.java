@@ -40,7 +40,7 @@ public class Database {
 
 		items = new DataLoader<DatabaseKey, DynamoItem>(keys -> {
 			return dynamo.get(keys);
-		}, DataLoaderOptions.newOptions().setMaxBatchSize(50)); // will auto call global
+		}, DataLoaderOptions.newOptions().setMaxBatchSize(dynamo.maxBatchSize())); // will auto call global
 		
 		queries = new DataLoader<DatabaseQueryKey, List<DynamoItem>>(keys -> {
 			return merge(keys.stream().map(key -> dynamo.query(key)));
