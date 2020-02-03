@@ -42,7 +42,7 @@ public class DynamoDbManager {
 	}
 	
 	
-	public Database getDatabase(String organisationId, PutPermission putAllow) {
+	public Database getDatabase(String organisationId, ModificationPermission putAllow) {
 		return new Database(mapper, organisationId, dynamoDb, putAllow);
 	}
 	

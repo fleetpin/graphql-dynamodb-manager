@@ -32,7 +32,7 @@ public class Database {
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 	
-	Database(ObjectMapper mapper, String organisationId, DynamoDb dynamo, PutPermission putAllow) {
+	Database(ObjectMapper mapper, String organisationId, DynamoDb dynamo, ModificationPermission putAllow) {
 		this.mapper = mapper;
 		this.organisationId = organisationId;
 		this.dynamo = dynamo;
