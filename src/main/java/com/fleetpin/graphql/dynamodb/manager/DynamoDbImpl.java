@@ -343,13 +343,25 @@ public class DynamoDbImpl implements DynamoDb {
 								Map<String, AttributeValue> m = new HashMap<>();
 								m.put(source, AttributeValue.builder().ss(entity.getId()).build());
 								v.put(":val", AttributeValue.builder().m(m).build());
-								return client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("SET links = :val").expressionAttributeValues(v));
+								return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val").expressionAttributeValues(v));
+							}else {
+								throw new RuntimeException(e);
+							}
+						}
+						return CompletableFuture.completedFuture(null);
+					}).thenCompose(a -> a)
+					.handle((r, e) -> { //nasty if attribute now exists use first approach again...
+						if(e != null) {
+							if(e.getCause() instanceof ConditionalCheckFailedException) {
+								return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val").expressionAttributeNames(k).expressionAttributeValues(v));
 							}else {
 								throw new RuntimeException(e);
 							}
 						}
 						return CompletableFuture.completedFuture(null);
 					}).thenCompose(a -> a);
+			
+			
 			future = future.thenCombine(destination, (a,b) -> b);
 		}
 			var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
@@ -375,7 +387,17 @@ public class DynamoDbImpl implements DynamoDb {
     							Map<String, AttributeValue> m = new HashMap<>();
     							m.put(target, values.get(":val"));
     							values.put(":val", AttributeValue.builder().m(m).build());
-    							return client.updateItem(request -> request.tableName(entityTable).key(key).updateExpression("SET links = :val").expressionAttributeValues(values));
+    							return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val").expressionAttributeValues(values));
+    						}else {
+    							throw new RuntimeException(e);
+    						}
+    					}
+    					return CompletableFuture.completedFuture(null);
+    				}).thenCompose(a -> a)
+    				.handle((r, e) -> {
+    					if(e != null) {
+    						if(e.getCause() instanceof ConditionalCheckFailedException) {
+    							return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)").updateExpression("SET links.#table = :val" ).expressionAttributeNames(k).expressionAttributeValues(values));
     						}else {
     							throw new RuntimeException(e);
     						}
