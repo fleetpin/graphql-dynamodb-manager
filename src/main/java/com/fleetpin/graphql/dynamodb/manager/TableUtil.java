@@ -21,7 +21,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.DoubleNode;
+import com.fasterxml.jackson.databind.node.LongNode;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 
@@ -167,7 +170,11 @@ public class TableUtil {
 			return BinaryNode.valueOf(value.b().asByteArray());
 		}
 		if(value.n() != null) {
-			return TextNode.valueOf(value.n());
+			double v = Double.parseDouble(value.n());
+			if(Math.floor(v) == v) {
+				return LongNode.valueOf(Long.parseLong(value.n()));
+			}
+			return DoubleNode.valueOf(v);
 		}
 		if(value.s() != null) {
 			return TextNode.valueOf(value.s());
