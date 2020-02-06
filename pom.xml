@@ -5,33 +5,51 @@
 	<groupId>com.fleetpin</groupId>
 	<artifactId>graphql-dynamodb-manager</artifactId>
 	<version>0.0.5</version>
+	<name>GraphQL Builder</name>
+	<description>library to make working with dynamodb and graphql easy</description>
+	<url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
 
 	<properties>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<junit.jupiter.version>5.4.2</junit.jupiter.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 
-	<!--Custom repository: -->
-	<repositories>
-		<repository>
-			<id>central</id>
-			<url>https://repo1.maven.org/maven2/</url>
-		</repository>
-		<repository>
-			<id>dynamodb-local-oregon</id>
-			<name>DynamoDB Local Release Repository</name>
-			<url>https://s3-ap-southeast-1.amazonaws.com/dynamodb-local-singapore/release</url>
-		</repository>
-	</repositories>
-
-
 	<distributionManagement>
+		<snapshotRepository>
+			<id>sonatype</id>
+			<name>central snapshot</name>
+			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
+		</snapshotRepository>
 		<repository>
-			<id>github</id>
-			<name>GitHub OWNER Apache Maven Packages</name>
-			<url>https://maven.pkg.github.com/fleetpin/mavenrepository</url>
+			<id>sonatype</id>
+			<name>central release</name>
+			<url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
 		</repository>
 	</distributionManagement>
+
+	<scm>
+		<url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
+		<connection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</connection>
+		<developerConnection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</developerConnection>
+	</scm>
+
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<developer>
+			<name>Ashley Taylor</name>
+			<email>ashley.taylor@fleetpin.co.nz</email>
+			<organization>Fleetpin</organization>
+			<organizationUrl>http://www.fleetpin.co.nz</organizationUrl>
+		</developer>
+	</developers>
+
 
 	<build>
 		<plugins>
@@ -91,7 +109,7 @@
 		<dependency>
 			<groupId>com.fleetpin</groupId>
 			<artifactId>graphql-builder</artifactId>
-			<version>0.0.6</version>
+			<version>0.1.1</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -130,4 +148,77 @@
 		</dependency>
 
 	</dependencies>
+
+	<profiles>
+		<profile>
+			<id>sonatype</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-compiler-plugin</artifactId>
+						<configuration>
+							<source>11</source>
+							<target>11</target>
+							<compilerArgument>-parameters</compilerArgument>
+						</configuration>
+					</plugin>
+					<plugin>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<version>2.22.2</version>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>attach-sources</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<version>3.1.1</version>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-gpg-plugin</artifactId>
+						<version>1.6</version>
+						<executions>
+							<execution>
+								<id>sign-artifacts</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>sign</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.sonatype.plugins</groupId>
+						<artifactId>nexus-staging-maven-plugin</artifactId>
+						<version>1.6.7</version>
+						<extensions>true</extensions>
+						<configuration>
+							<serverId>sonatype</serverId>
+							<nexusUrl>https://oss.sonatype.org/</nexusUrl>
+							<autoReleaseAfterClose>true</autoReleaseAfterClose>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 </project>
