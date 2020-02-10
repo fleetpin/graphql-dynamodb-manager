@@ -101,7 +101,11 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public CompletableFuture<List<DynamoItem>> query(final DatabaseQueryKey key) {
-        return null;
+        return CompletableFuture.supplyAsync(() -> map.entrySet()
+                .stream()
+                .filter(entry -> queryInMap(key, entry))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList()));
     }
 
     @Override
@@ -148,6 +152,11 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseKey key) {
         return key.equals(entry.getKey()) ||
-                (entry.getKey().getOrganisationId().equals("global") && entry.getKey().getId().equals(key.getId()));
+                (entry.getKey().getOrganisationId().equals("global") && key.getId().equals(entry.getKey().getId()));
+    }
+
+    private boolean queryInMap(final DatabaseQueryKey key, final Map.Entry<DatabaseKey, DynamoItem> entry) {
+        return key.getType().equals(entry.getKey().getType()) &&
+                (entry.getKey().getOrganisationId().equals("global") || key.getOrganisationId().equals(entry.getKey().getOrganisationId()));
     }
 }

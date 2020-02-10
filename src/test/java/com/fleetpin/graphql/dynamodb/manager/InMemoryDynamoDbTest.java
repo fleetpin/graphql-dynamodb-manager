@@ -8,8 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class InMemoryDynamoDbTest {
     private InMemoryDynamoDb inMemoryDynamoDb;
@@ -74,6 +73,28 @@ final class InMemoryDynamoDbTest {
         final var items = inMemoryDynamoDb.get(List.of(databaseKey)).get();
 
         assertTrue(items.isEmpty());
+    }
+
+    @Test
+    void shouldBeAbleToFindItemUsingQueryMethod() throws ExecutionException, InterruptedException {
+        inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-0")).get();
+
+        final var databaseQueryKey = new DatabaseQueryKey("organisation-0", IdExposingTable.class);
+        final var items = inMemoryDynamoDb.query(databaseQueryKey).get();
+
+        assertFalse(items.isEmpty());
+        assertEquals("id-0", items.get(0).getId());
+    }
+
+    @Test
+    void shouldBeAbleToFindItemUsingQueryMethodAndGlobalOrganisationId() throws ExecutionException, InterruptedException {
+        inMemoryDynamoDb.put("global", new IdExposingTable("id-0")).get();
+
+        final var databaseQueryKey = new DatabaseQueryKey("fooey", IdExposingTable.class);
+        final var items = inMemoryDynamoDb.query(databaseQueryKey).get();
+
+        assertFalse(items.isEmpty());
+        assertEquals("id-0", items.get(0).getId());
     }
 
     static final class IdExposingTable extends Table {
