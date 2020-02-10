@@ -15,7 +15,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dataloader.DataLoader;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +42,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
         return null;
     }
 
+    // TODO: 10/02/20 ask about fleetpin specific logic 
     @Override
     public <T extends Table> CompletableFuture<T> put(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
@@ -50,7 +50,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
             final var item = new HashMap<String, AttributeValue>();
             item.put("organisationId", AttributeValue.builder().s(organisationId).build());
-            item.put("id", AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build());
+            item.put("id", createTableNamedKey(entity, entity.getId()));
             item.put("item", TableUtil.toAttributes(objectMapper, entity));
             item.put(
                     "links",
@@ -63,6 +63,17 @@ public final class InMemoryDynamoDb implements DynamoDb {
                             ))
                     ).build()
             );
+
+            final var secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
+            if (secondaryGlobal != null) {
+                item.put("secondaryGlobal", createTableNamedKey(entity, secondaryGlobal));
+            }
+
+            final var secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
+            if (secondaryOrganisation != null) {
+                item.put("secondaryOrganisation", createTableNamedKey(entity, secondaryOrganisation));
+            }
+
             final var dynamoItem = new DynamoItem(entity.getSourceTable(), item);
 
             map.put(databaseKey, dynamoItem);
@@ -73,13 +84,11 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public CompletableFuture<List<DynamoItem>> get(final List<DatabaseKey> keys) {
-        return CompletableFuture.supplyAsync(() -> {
-            final var items = new ArrayList<DynamoItem>();
-
-            map.forEach((key, value) -> items.add(value));
-
-            return items;
-        });
+        return CompletableFuture.supplyAsync(() -> map.entrySet()
+                .stream()
+                .filter(entry -> keys.contains(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList()));
     }
 
     @Override
@@ -115,5 +124,10 @@ public final class InMemoryDynamoDb implements DynamoDb {
     @Override
     public String newId() {
         return null;
+    }
+
+    private <T extends Table> AttributeValue createTableNamedKey(final T entity, final String id) {
+        final var tableName = table(entity.getClass());
+        return AttributeValue.builder().s(tableName + ":" + id).build();
     }
 }

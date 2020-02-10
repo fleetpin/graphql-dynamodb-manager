@@ -177,5 +177,16 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 			return name;
 		}
 	}
-	
+
+	static final class SimpleTable extends Table {
+		private String name;
+
+		public SimpleTable(final String name) {
+			this.name = name;
+		}
+
+		public String getName() {
+			return name;
+		}
+	}
 }
