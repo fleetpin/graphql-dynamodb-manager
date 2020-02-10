@@ -16,7 +16,17 @@ final class InMemoryDynamoDbTest {
 
     @BeforeEach
     void setUp() {
-        inMemoryDynamoDb = new InMemoryDynamoDb();
+        inMemoryDynamoDb = new InMemoryDynamoDb(() -> "generated-id");
+    }
+
+    @Test
+    void shouldBeAbleToPutWithNullIdAndGenerateUsingGenerator() throws ExecutionException, InterruptedException {
+        inMemoryDynamoDb.put("organisation-0", new DynamoDBQueryTest.SimpleTable("name")).get();
+
+        final var databaseKeys = new DatabaseKey("organisation-0", DynamoDBQueryTest.SimpleTable.class, "generated-id");
+        final var items = inMemoryDynamoDb.get(List.of(databaseKeys)).get();
+
+        assertEquals("generated-id", items.get(0).getId());
     }
 
     @Test

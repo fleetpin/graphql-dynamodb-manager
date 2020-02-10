@@ -20,16 +20,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.fleetpin.graphql.dynamodb.manager.DynamoDbImpl.table;
 
 public final class InMemoryDynamoDb implements DynamoDb {
-    public static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentHashMap<DatabaseKey, DynamoItem> map;
+    private final Supplier<String> idGenerator;
 
-    public InMemoryDynamoDb() {
+    public InMemoryDynamoDb(final Supplier<String> idGenerator) {
         this.map = new ConcurrentHashMap<>();
+        this.idGenerator = idGenerator;
     }
 
     @Override
@@ -50,10 +53,13 @@ public final class InMemoryDynamoDb implements DynamoDb {
         return null;
     }
 
-    // TODO: 10/02/20 ask about fleetpin specific logic 
     @Override
     public <T extends Table> CompletableFuture<T> put(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
+            if (entity.getId() == null) {
+                entity.setId(newId());
+            }
+
             final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
 
             final var item = new HashMap<String, AttributeValue>();
@@ -131,7 +137,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public String newId() {
-        return null;
+        return idGenerator.get();
     }
 
     private <T extends Table> AttributeValue createTableNamedKey(final T entity, final String id) {
