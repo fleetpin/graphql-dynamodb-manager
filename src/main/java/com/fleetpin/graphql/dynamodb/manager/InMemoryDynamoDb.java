@@ -60,34 +60,23 @@ public final class InMemoryDynamoDb implements DynamoDb {
                 entity.setId(newId());
             }
 
-            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
+            final var links = AttributeValue.builder().m(entity.getLinks()
+                    .entries()
+                    .stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            value -> AttributeValue.builder().ss(value.getValue()).build()
+                    ))
+            ).build();
 
             final var item = new HashMap<String, AttributeValue>();
             item.put("organisationId", AttributeValue.builder().s(organisationId).build());
             item.put("id", createTableNamedKey(entity, entity.getId()));
             item.put("item", TableUtil.toAttributes(objectMapper, entity));
-            item.put(
-                    "links",
-                    AttributeValue.builder().m(entity.getLinks()
-                            .entries()
-                            .stream()
-                            .collect(Collectors.toMap(
-                                    Map.Entry::getKey,
-                                    value -> AttributeValue.builder().ss(value.getValue()).build()
-                            ))
-                    ).build()
-            );
+            item.put("links", links);
+            appendSecondaryItemFields(entity, item);
 
-            final var secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
-            if (secondaryGlobal != null) {
-                item.put("secondaryGlobal", createTableNamedKey(entity, secondaryGlobal));
-            }
-
-            final var secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
-            if (secondaryOrganisation != null) {
-                item.put("secondaryOrganisation", createTableNamedKey(entity, secondaryOrganisation));
-            }
-
+            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
             final var dynamoItem = new DynamoItem(entity.getSourceTable(), item);
 
             map.put(databaseKey, dynamoItem);
@@ -143,6 +132,18 @@ public final class InMemoryDynamoDb implements DynamoDb {
     private <T extends Table> AttributeValue createTableNamedKey(final T entity, final String id) {
         final var tableName = table(entity.getClass());
         return AttributeValue.builder().s(tableName + ":" + id).build();
+    }
+
+    private <T extends Table> void appendSecondaryItemFields(final T entity, final HashMap<String, AttributeValue> item) {
+        final var secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
+        if (secondaryGlobal != null) {
+            item.put("secondaryGlobal", createTableNamedKey(entity, secondaryGlobal));
+        }
+
+        final var secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
+        if (secondaryOrganisation != null) {
+            item.put("secondaryOrganisation", createTableNamedKey(entity, secondaryOrganisation));
+        }
     }
 
     private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseKey key) {
