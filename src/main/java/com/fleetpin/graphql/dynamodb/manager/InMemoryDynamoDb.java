@@ -34,7 +34,15 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public <T extends Table> CompletableFuture<T> delete(final String organisationId, final T entity) {
-        return null;
+        return CompletableFuture.supplyAsync(() -> {
+            if (!organisationId.equals(entity.getSourceOrganistaionId())) {
+                return entity;
+            }
+
+            map.remove(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
+
+            return entity;
+        });
     }
 
     @Override
