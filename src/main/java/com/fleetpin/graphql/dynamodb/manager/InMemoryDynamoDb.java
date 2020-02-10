@@ -86,7 +86,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
     public CompletableFuture<List<DynamoItem>> get(final List<DatabaseKey> keys) {
         return CompletableFuture.supplyAsync(() -> map.entrySet()
                 .stream()
-                .filter(entry -> keys.contains(entry.getKey()))
+                .filter(entry -> keys.stream().anyMatch(key -> foundInMap(entry, key)))
                 .map(Map.Entry::getValue)
                 .collect(Collectors.toList()));
     }
@@ -118,7 +118,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public int maxBatchSize() {
-        return 0;
+        return 50 / map.size();
     }
 
     @Override
@@ -129,5 +129,10 @@ public final class InMemoryDynamoDb implements DynamoDb {
     private <T extends Table> AttributeValue createTableNamedKey(final T entity, final String id) {
         final var tableName = table(entity.getClass());
         return AttributeValue.builder().s(tableName + ":" + id).build();
+    }
+
+    private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseKey key) {
+        return key.equals(entry.getKey()) ||
+                (entry.getKey().getOrganisationId().equals("global") && entry.getKey().getId().equals(key.getId()));
     }
 }

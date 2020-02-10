@@ -40,6 +40,16 @@ final class InMemoryDynamoDbTest {
         assertEquals("id-0", items.get(0).getId());
     }
 
+    @Test
+    void shouldShouldAbleToFetchOnlyItemWhenGlobalRegardlessOfGivenKey() throws ExecutionException, InterruptedException {
+        inMemoryDynamoDb.put("global", new IdExposingTable("id-0")).get();
+        final var databaseKey = new DatabaseKey("dontcare-0", IdExposingTable.class, "id-0");
+
+        final var items = inMemoryDynamoDb.get(List.of(databaseKey)).get();
+
+        assertEquals("id-0", items.get(0).getId());
+    }
+
     static final class IdExposingTable extends Table {
         private final String id;
 
