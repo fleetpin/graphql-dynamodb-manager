@@ -17,8 +17,6 @@ import java.util.concurrent.ExecutionException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fleetpin.graphql.dynamodb.manager.Table;
-
 public class DynamoDBQueryTest extends DynamoDBBase {
 
 	@Test
@@ -32,11 +30,11 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		var entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(3, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("bob", entries.get(0).name);
-		Assertions.assertEquals("frank", entries.get(1).name);
-		Assertions.assertEquals("garry", entries.get(2).name);
+		Assertions.assertEquals("bob", entries.get(0).getName());
+		Assertions.assertEquals("frank", entries.get(1).getName());
+		Assertions.assertEquals("garry", entries.get(2).getName());
 	}
 	
 	@Test
@@ -53,19 +51,19 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		var entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(3, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("bob", entries.get(0).name);
-		Assertions.assertEquals("frank", entries.get(1).name);
-		Assertions.assertEquals("garry", entries.get(2).name);
+		Assertions.assertEquals("bob", entries.get(0).getName());
+		Assertions.assertEquals("frank", entries.get(1).getName());
+		Assertions.assertEquals("garry", entries.get(2).getName());
 		
 		var entriesOther = db.query(AnotherTable.class).get();
 		Assertions.assertEquals(2, entriesOther.size());
 		
-		entriesOther.sort(Comparator.comparing(a -> a.name));
+		entriesOther.sort(Comparator.comparing(AnotherTable::getName));
 		
-		Assertions.assertEquals("ed", entriesOther.get(0).name);
-		Assertions.assertEquals("eddie", entriesOther.get(1).name);
+		Assertions.assertEquals("ed", entriesOther.get(0).getName());
+		Assertions.assertEquals("eddie", entriesOther.get(1).getName());
 
 	}
 	
@@ -82,21 +80,21 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		var entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(3, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("bob", entries.get(0).name);
-		Assertions.assertEquals("frank", entries.get(1).name);
-		Assertions.assertEquals("garry", entries.get(2).name);
+		Assertions.assertEquals("bob", entries.get(0).getName());
+		Assertions.assertEquals("frank", entries.get(1).getName());
+		Assertions.assertEquals("garry", entries.get(2).getName());
 		
 		db.delete(entries.get(1), false);
 		
 		entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(2, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("bob", entries.get(0).name);
-		Assertions.assertEquals("garry", entries.get(1).name);
+		Assertions.assertEquals("bob", entries.get(0).getName());
+		Assertions.assertEquals("garry", entries.get(1).getName());
 		
 	}
 
@@ -117,21 +115,21 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		var entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(3, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("GARRY", entries.get(0).name);
-		Assertions.assertEquals("bob", entries.get(1).name);
-		Assertions.assertEquals("frank", entries.get(2).name);
+		Assertions.assertEquals("GARRY", entries.get(0).getName());
+		Assertions.assertEquals("bob", entries.get(1).getName());
+		Assertions.assertEquals("frank", entries.get(2).getName());
 		
 		db.delete(entries.get(1), false);
 		
 		entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(2, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("GARRY", entries.get(0).name);
-		Assertions.assertEquals("frank", entries.get(1).name);
+		Assertions.assertEquals("GARRY", entries.get(0).getName());
+		Assertions.assertEquals("frank", entries.get(1).getName());
 		
 	}
 	
@@ -151,43 +149,25 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		var entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(3, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("GARRY", entries.get(0).name);
-		Assertions.assertEquals("bob", entries.get(1).name);
-		Assertions.assertEquals("frank", entries.get(2).name);
+		Assertions.assertEquals("GARRY", entries.get(0).getName());
+		Assertions.assertEquals("bob", entries.get(1).getName());
+		Assertions.assertEquals("frank", entries.get(2).getName());
 		
 		db.delete(entries.get(1), false);
 		
 		entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(2, entries.size());
 		
-		entries.sort(Comparator.comparing(a -> a.name));
+		entries.sort(Comparator.comparing(SimpleTable::getName));
 		
-		Assertions.assertEquals("GARRY", entries.get(0).name);
-		Assertions.assertEquals("frank", entries.get(1).name);
-	}
-	
-	static class SimpleTable extends Table {
-		private String name;
-
-		public SimpleTable() {
-		}
-
-		public SimpleTable(String name) {
-			this.name = name;
-		}
-
-		public String getName() {
-			return name;
-		}
+		Assertions.assertEquals("GARRY", entries.get(0).getName());
+		Assertions.assertEquals("frank", entries.get(1).getName());
 	}
 
 	static class AnotherTable extends Table {
 		private String name;
-
-		public AnotherTable() {
-		}
 
 		public AnotherTable(String name) {
 			this.name = name;

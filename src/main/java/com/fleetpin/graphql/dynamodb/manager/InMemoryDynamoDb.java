@@ -1,11 +1,38 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
 package com.fleetpin.graphql.dynamodb.manager;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dataloader.DataLoader;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+import static com.fleetpin.graphql.dynamodb.manager.DynamoDbImpl.table;
 
 public final class InMemoryDynamoDb implements DynamoDb {
+    public static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ConcurrentHashMap<DatabaseKey, DynamoItem> map;
+
+    public InMemoryDynamoDb() {
+        this.map = new ConcurrentHashMap<>();
+    }
+
     @Override
     public <T extends Table> CompletableFuture<T> delete(final String organisationId, final T entity) {
         return null;
@@ -18,12 +45,41 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public <T extends Table> CompletableFuture<T> put(final String organisationId, final T entity) {
-        return null;
+        return CompletableFuture.supplyAsync(() -> {
+            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
+
+            final var item = new HashMap<String, AttributeValue>();
+            item.put("organisationId", AttributeValue.builder().s(organisationId).build());
+            item.put("id", AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build());
+            item.put("item", TableUtil.toAttributes(objectMapper, entity));
+            item.put(
+                    "links",
+                    AttributeValue.builder().m(entity.getLinks()
+                            .entries()
+                            .stream()
+                            .collect(Collectors.toMap(
+                                    Map.Entry::getKey,
+                                    value -> AttributeValue.builder().ss(value.getValue()).build()
+                            ))
+                    ).build()
+            );
+            final var dynamoItem = new DynamoItem(entity.getSourceTable(), item);
+
+            map.put(databaseKey, dynamoItem);
+
+            return entity;
+        });
     }
 
     @Override
     public CompletableFuture<List<DynamoItem>> get(final List<DatabaseKey> keys) {
-        return null;
+        return CompletableFuture.supplyAsync(() -> {
+            final var items = new ArrayList<DynamoItem>();
+
+            map.forEach((key, value) -> items.add(value));
+
+            return items;
+        });
     }
 
     @Override
