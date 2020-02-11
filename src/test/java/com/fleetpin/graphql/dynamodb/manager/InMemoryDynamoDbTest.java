@@ -122,11 +122,13 @@ final class InMemoryDynamoDbTest {
         inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-0")).get();
         inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-1")).get();
 
-        inMemoryDynamoDb.link("organisation-0", new IdExposingTable("id-0"), IdExposingTable.class, List.of("id-1")).get();
+        final var targetItem = inMemoryDynamoDb.link("organisation-0", new IdExposingTable("id-0"), IdExposingTable.class, List.of("id-1")).get();
 
-        final var targetItem = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
-        assertFalse(targetItem.get(0).getLinks().get("idexposingtables").isEmpty());
-        assertEquals("id-1", targetItem.get(0).getLinks().get("idexposingtables").toArray()[0]);
+        final var item = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
+        assertEquals(item.get(0).getLinks(), targetItem.getLinks());
+
+        assertFalse(targetItem.getLinks().get("idexposingtables").isEmpty());
+        assertEquals("id-1", targetItem.getLinks().get("idexposingtables").toArray()[0]);
 
         final var linkedItem = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-1"))).get();
         assertFalse(linkedItem.get(0).getLinks().get("idexposingtables").isEmpty());

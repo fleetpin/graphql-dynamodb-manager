@@ -18,6 +18,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
@@ -59,9 +60,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
     @Override
     public <T extends Table> CompletableFuture<T> put(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
-            if (entity.getId() == null) {
-                entity.setId(newId());
-            }
+            final var entityId = Objects.requireNonNullElse(entity.getId(), newId());
 
             final var links = AttributeValue.builder().m(entity.getLinks()
                     .entries()
@@ -74,12 +73,12 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
             final var item = new HashMap<String, AttributeValue>();
             item.put("organisationId", AttributeValue.builder().s(organisationId).build());
-            item.put("id", createTableNamedKey(entity.getClass(), entity.getId()));
+            item.put("id", createTableNamedKey(entity.getClass(), entityId));
             item.put("item", TableUtil.toAttributes(objectMapper, entity));
             item.put("links", links);
             appendSecondaryItemFields(entity, item);
 
-            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
+            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entityId);
             final var dynamoItem = new DynamoItem(entity.getSourceTable(), item);
 
             map.put(databaseKey, dynamoItem);
@@ -164,6 +163,8 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
                 map.get(groupDatabaseKey).getLinks().get(targetTable).add(targetItem.getId());
             });
+
+            entry.getLinks().putAll(targetItem.getLinks());
 
             return entry;
         });
