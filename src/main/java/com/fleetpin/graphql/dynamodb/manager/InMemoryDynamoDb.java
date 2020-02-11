@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -87,11 +88,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public CompletableFuture<List<DynamoItem>> get(final List<DatabaseKey> keys) {
-        return CompletableFuture.supplyAsync(() -> map.entrySet()
-                .stream()
-                .filter(entry -> keys.stream().anyMatch(key -> foundInMap(entry, key)))
-                .map(Map.Entry::getValue)
-                .collect(Collectors.toList()));
+        return CompletableFuture.supplyAsync(() -> getWithFilter(entry -> keys.stream().anyMatch(key -> foundInMap(entry, key))));
     }
 
     @Override
@@ -101,11 +98,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public CompletableFuture<List<DynamoItem>> query(final DatabaseQueryKey key) {
-        return CompletableFuture.supplyAsync(() -> map.entrySet()
-                .stream()
-                .filter(entry -> queryInMap(key, entry))
-                .map(Map.Entry::getValue)
-                .collect(Collectors.toList()));
+        return CompletableFuture.supplyAsync(() -> getWithFilter(entry -> foundInMap(entry, key)));
     }
 
     @Override
@@ -150,12 +143,20 @@ public final class InMemoryDynamoDb implements DynamoDb {
         }
     }
 
+    private List<DynamoItem> getWithFilter(final Predicate<Map.Entry<DatabaseKey, DynamoItem>> filterPredicate) {
+        return map.entrySet()
+                .stream()
+                .filter(filterPredicate)
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+    }
+
     private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseKey key) {
         return key.equals(entry.getKey()) ||
                 (entry.getKey().getOrganisationId().equals("global") && key.getId().equals(entry.getKey().getId()));
     }
 
-    private boolean queryInMap(final DatabaseQueryKey key, final Map.Entry<DatabaseKey, DynamoItem> entry) {
+    private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseQueryKey key) {
         return key.getType().equals(entry.getKey().getType()) &&
                 (entry.getKey().getOrganisationId().equals("global") || key.getOrganisationId().equals(entry.getKey().getOrganisationId()));
     }
