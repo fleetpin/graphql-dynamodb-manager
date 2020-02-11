@@ -97,6 +97,26 @@ final class InMemoryDynamoDbTest {
         assertEquals("id-0", items.get(0).getId());
     }
 
+    @Test
+    void shouldBeAbleToFindUsingGlobalQuery() throws ExecutionException, InterruptedException {
+        inMemoryDynamoDb.put("organisation-id", new DynamoDBIndexesTest.SimpleTable("name-0", "lookup-0")).get();
+
+        final var items = inMemoryDynamoDb.queryGlobal(DynamoDBIndexesTest.SimpleTable.class, "lookup-0").get();
+
+        assertFalse(items.isEmpty());
+        assertEquals("generated-id", items.get(0).getId());
+    }
+
+    @Test
+    void shouldBeAbleToFindUsingSecondaryQuery() throws ExecutionException, InterruptedException {
+        inMemoryDynamoDb.put("organisation-0", new DynamoDBIndexesTest.SimpleTable("name-0", "lookup-0")).get();
+
+        final var items = inMemoryDynamoDb.querySecondary(DynamoDBIndexesTest.SimpleTable.class, "organisation-0", "name-0").get();
+
+        assertFalse(items.isEmpty());
+        assertEquals("generated-id", items.get(0).getId());
+    }
+
     static final class IdExposingTable extends Table {
         private final String id;
 

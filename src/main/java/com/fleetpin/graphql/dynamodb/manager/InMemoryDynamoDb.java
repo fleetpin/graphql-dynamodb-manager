@@ -27,6 +27,8 @@ import java.util.stream.Collectors;
 import static com.fleetpin.graphql.dynamodb.manager.DynamoDbImpl.table;
 
 public final class InMemoryDynamoDb implements DynamoDb {
+    private static final String SECONDARY_GLOBAL = "secondaryGlobal";
+    private static final String SECONDARY_ORGANISATION = "secondaryOrganisation";
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentHashMap<DatabaseKey, DynamoItem> map;
     private final Supplier<String> idGenerator;
@@ -72,7 +74,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
             final var item = new HashMap<String, AttributeValue>();
             item.put("organisationId", AttributeValue.builder().s(organisationId).build());
-            item.put("id", createTableNamedKey(entity, entity.getId()));
+            item.put("id", createTableNamedKey(entity.getClass(), entity.getId()));
             item.put("item", TableUtil.toAttributes(objectMapper, entity));
             item.put("links", links);
             appendSecondaryItemFields(entity, item);
@@ -103,12 +105,25 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public CompletableFuture<List<DynamoItem>> queryGlobal(final Class<? extends Table> type, final String value) {
-        return null;
+        return CompletableFuture.supplyAsync(() -> {
+            final var tableName = createTableNamedKey(type, value);
+
+            return getWithFilter(entry -> entry.getValue()
+                    .getItem()
+                    .get(SECONDARY_GLOBAL)
+                    .equals(tableName)
+            );
+        });
     }
 
     @Override
     public CompletableFuture<List<DynamoItem>> querySecondary(final Class<? extends Table> type, final String organisationId, final String value) {
-        return null;
+        return CompletableFuture.supplyAsync(() -> {
+            final var tableName = createTableNamedKey(type, value);
+
+            return getWithFilter(entry -> entry.getKey().getOrganisationId().equals(organisationId) &&
+                    entry.getValue().getItem().get(SECONDARY_ORGANISATION).equals(tableName));
+        });
     }
 
     @Override
@@ -126,20 +141,20 @@ public final class InMemoryDynamoDb implements DynamoDb {
         return idGenerator.get();
     }
 
-    private <T extends Table> AttributeValue createTableNamedKey(final T entity, final String id) {
-        final var tableName = table(entity.getClass());
+    private AttributeValue createTableNamedKey(final Class<? extends Table> type, final String id) {
+        final var tableName = table(type);
         return AttributeValue.builder().s(tableName + ":" + id).build();
     }
 
     private <T extends Table> void appendSecondaryItemFields(final T entity, final HashMap<String, AttributeValue> item) {
         final var secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
         if (secondaryGlobal != null) {
-            item.put("secondaryGlobal", createTableNamedKey(entity, secondaryGlobal));
+            item.put(SECONDARY_GLOBAL, createTableNamedKey(entity.getClass(), secondaryGlobal));
         }
 
         final var secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
         if (secondaryOrganisation != null) {
-            item.put("secondaryOrganisation", createTableNamedKey(entity, secondaryOrganisation));
+            item.put(SECONDARY_ORGANISATION, createTableNamedKey(entity.getClass(), secondaryOrganisation));
         }
     }
 
