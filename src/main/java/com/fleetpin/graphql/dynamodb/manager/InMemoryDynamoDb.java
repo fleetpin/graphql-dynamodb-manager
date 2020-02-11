@@ -94,8 +94,19 @@ public final class InMemoryDynamoDb implements DynamoDb {
     }
 
     @Override
-    public CompletableFuture<List<DynamoItem>> getViaLinks(final String organisationId, final Table entry, final Class<? extends Table> type, final DataLoader<DatabaseKey, DynamoItem> items) {
-        return null;
+    public CompletableFuture<List<DynamoItem>> getViaLinks(
+            final String organisationId,
+            final Table entry,
+            final Class<? extends Table> type,
+            final DataLoader<DatabaseKey, DynamoItem> items
+    ) {
+        final var tableTarget = table(type);
+        final var links = entry.getLinks().get(tableTarget);
+        final var keys = links.stream()
+                .map(link -> new DatabaseKey(organisationId, type, link))
+                .collect(Collectors.toList());
+
+        return items.loadMany(keys);
     }
 
     @Override
@@ -117,7 +128,11 @@ public final class InMemoryDynamoDb implements DynamoDb {
     }
 
     @Override
-    public CompletableFuture<List<DynamoItem>> querySecondary(final Class<? extends Table> type, final String organisationId, final String value) {
+    public CompletableFuture<List<DynamoItem>> querySecondary(
+            final Class<? extends Table> type,
+            final String organisationId,
+            final String value
+    ) {
         return CompletableFuture.supplyAsync(() -> {
             final var tableName = createTableNamedKey(type, value);
 
@@ -127,8 +142,31 @@ public final class InMemoryDynamoDb implements DynamoDb {
     }
 
     @Override
-    public <T extends Table> CompletableFuture<T> link(final String organisationId, final T entry, final Class<? extends Table> class1, final List<String> groupIds) {
-        return null;
+    public <T extends Table> CompletableFuture<T> link(
+            final String organisationId,
+            final T entry,
+            final Class<? extends Table> class1,
+            final List<String> groupIds
+    ) {
+        return CompletableFuture.supplyAsync(() -> {
+            final var databaseKey = new DatabaseKey(organisationId, entry.getClass(), entry.getId());
+
+            final var targetItem = map.get(databaseKey);
+            final var targetTable = table(entry.getClass());
+
+            final var linkTable = table(class1);
+            targetItem.getLinks().clear();
+            groupIds.forEach(groupId -> {
+                targetItem.getLinks().get(linkTable).add(groupId);
+
+                // TODO: 11/02/20 ask about organisationId spoofing
+                final var groupDatabaseKey = new DatabaseKey(organisationId, class1, groupId);
+
+                map.get(groupDatabaseKey).getLinks().get(targetTable).add(targetItem.getId());
+            });
+
+            return entry;
+        });
     }
 
     @Override
