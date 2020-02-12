@@ -17,13 +17,14 @@ import java.util.concurrent.ExecutionException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fleetpin.graphql.dynamodb.manager.Table;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 public class DynamoDBQueryTest extends DynamoDBBase {
-
-	@Test
-	public void testSimpleQuery() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testSimpleQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
@@ -39,9 +40,10 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", entries.get(2).name);
 	}
 
-	@Test
-	public void testTwoTablesQuery() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testTwoTablesQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
@@ -71,9 +73,10 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 
 
 
-	@Test
-	public void testQueryDeleteQuery() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testQueryDeleteQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();

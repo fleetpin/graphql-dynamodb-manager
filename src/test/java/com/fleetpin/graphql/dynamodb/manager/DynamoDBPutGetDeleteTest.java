@@ -16,13 +16,15 @@ import java.util.concurrent.ExecutionException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fleetpin.graphql.dynamodb.manager.Table;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 
-	@Test
-	public void testSimplePutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 		
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
@@ -40,11 +42,12 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertNull(entry1);
 	}
-	
-	@Test
-	public void testGlobalPutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
-		var db2 = getInMemoryDatabase("test");
+
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testGlobalPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
+		final var db2 = createTestDatabase(dbType, "test");
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -157,11 +160,12 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		
 		
 	}
-	
-	@Test
-	public void testTwoOrganisationsPutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var db2 = getDatabase("test2");
+
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testTwoOrganisationsPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
+		final var db2 = createTestDatabase(dbType, "test2");
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());

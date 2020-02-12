@@ -17,7 +17,8 @@ import java.util.concurrent.ExecutionException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fleetpin.graphql.dynamodb.manager.Table;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 public class DynamoDBLinkTest extends DynamoDBBase {
 
@@ -75,11 +76,12 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 		Assertions.assertEquals("frank", bobLinks.get(0).name);
 		Assertions.assertEquals("garry", bobLinks.get(1).name);
 	}
-	
-	
-	@Test
-	public void testUpdate() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+
+
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testUpdate(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
@@ -101,11 +103,12 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 		var johnLink = db.getLinks(john, SimpleTable.class).get();
 		Assertions.assertEquals(0, johnLink.size());
 	}
-	
-	
-	@Test
-	public void testDelete() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+
+
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
@@ -121,10 +124,11 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 		var list = db.getLinks(john, SimpleTable.class).get();
 		Assertions.assertEquals(0, list.size());
 	}
-	
-	@Test
-	public void testDeleteLinks() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testDeleteLinks(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();

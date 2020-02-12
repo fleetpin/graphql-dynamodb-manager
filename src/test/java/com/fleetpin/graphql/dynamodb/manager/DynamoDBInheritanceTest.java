@@ -15,19 +15,19 @@ import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
-import com.fleetpin.graphql.dynamodb.manager.Table;
-import com.fleetpin.graphql.dynamodb.manager.TableName;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.*;
 
 public class DynamoDBInheritanceTest extends DynamoDBBase {
 
-	@Test
-	public void testSimplePutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getInMemoryDatabase("test");
+	@ParameterizedTest
+	@EnumSource(DatabaseType.class)
+	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
+		final var db = createTestDatabase(dbType, "test");
 
 		db.put(new NameTable("garry")).get();
 		db.put(new AgeTable("19")).get();

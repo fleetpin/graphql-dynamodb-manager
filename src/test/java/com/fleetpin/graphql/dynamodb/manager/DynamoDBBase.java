@@ -11,13 +11,8 @@
  */
 package com.fleetpin.graphql.dynamodb.manager;
 
-import java.net.ServerSocket;
-import java.net.URI;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-
+import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
+import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -28,16 +23,15 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-
-import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
-import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
-
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
-import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
-import software.amazon.awssdk.services.dynamodb.model.KeyType;
-import software.amazon.awssdk.services.dynamodb.model.ProjectionType;
-import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
+import software.amazon.awssdk.services.dynamodb.model.*;
+
+import java.net.ServerSocket;
+import java.net.URI;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 
 public class DynamoDBBase {
 
@@ -135,6 +129,22 @@ public class DynamoDBBase {
 	public Database getInMemoryDatabase(final String organisationId) {
 		final var db = local.getDatabase(organisationId);
 		db.start(finished);
+		return db;
+	}
+
+	public Database createTestDatabase(final DatabaseType dbType, final String organisationId) {
+		Database db;
+		switch (dbType) {
+			case IN_MEMORY:
+				db = getInMemoryDatabase(organisationId);
+				break;
+			case EMBEDDED:
+				db = getDatabase(organisationId);
+				break;
+			default:
+				db = null;
+		}
+		
 		return db;
 	}
 }
