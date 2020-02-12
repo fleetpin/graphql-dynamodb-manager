@@ -135,6 +135,19 @@ final class InMemoryDynamoDbTest {
         assertEquals("id-0", linkedItem.get(0).getLinks().get("idexposingtables").toArray()[0]);
     }
 
+    @Test
+    void shouldClearLinksOfEntity() throws ExecutionException, InterruptedException {
+        inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-0")).get();
+        inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-1")).get();
+        inMemoryDynamoDb.link("organisation-0", new IdExposingTable("id-0"), IdExposingTable.class, List.of("id-1")).get();
+
+        final var clearedEntity = inMemoryDynamoDb.deleteLinks("organisation-0", new IdExposingTable("id-0")).get();
+        final var item = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
+
+        assertTrue(clearedEntity.getLinks().isEmpty());
+        assertTrue(item.get(0).getLinks().isEmpty());
+    }
+
     static final class IdExposingTable extends Table {
         private final String id;
 

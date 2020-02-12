@@ -54,7 +54,16 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public <T extends Table> CompletableFuture<T> deleteLinks(final String organisationId, final T entity) {
-        return null;
+        return CompletableFuture.supplyAsync(() -> {
+            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
+
+            final var item = map.get(databaseKey);
+            item.getLinks().clear();
+
+            entity.getLinks().clear();
+
+            return entity;
+        });
     }
 
     @Override
