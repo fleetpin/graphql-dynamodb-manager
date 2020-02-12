@@ -105,17 +105,14 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public CompletableFuture<List<DynamoItem>> get(final List<DatabaseKey> keys) {
-        return CompletableFuture.supplyAsync(() -> {
-            final var filtered = getWithFilter(entry -> keys.stream().anyMatch(key -> foundInMap(entry, key)));
-
-            // DataLoader requires the same number of outputs as inputs
-            // Add nice filler
-            for (int i = 0; i < keys.size() - filtered.size(); i++) {
-                filtered.add(null);
-            }
-
-            return filtered;
-        });
+        return CompletableFuture.supplyAsync(() -> keys.stream()
+                .map(key -> map.entrySet()
+                        .stream()
+                        .filter(entry -> foundInMap(entry, key))
+                        .findFirst()
+                        .map(Map.Entry::getValue)
+                        .orElse(null))
+                .collect(Collectors.toList()));
     }
 
     @Override
