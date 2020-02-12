@@ -183,7 +183,6 @@ public final class InMemoryDynamoDb implements DynamoDb {
             final var targetLinks = targetItem.getLinks().get(linkTable);
 
             targetLinks.forEach(linkedId -> {
-                // TODO: 12/02/20 ask about organisationId spoofing
                 final var linkedDatabaseKey = new DatabaseKey(organisationId, class1, linkedId);
                 map.get(linkedDatabaseKey).getLinks().get(targetTable).clear();
 
@@ -193,7 +192,6 @@ public final class InMemoryDynamoDb implements DynamoDb {
             groupIds.forEach(groupId -> {
                 targetLinks.add(groupId);
 
-                // TODO: 12/02/20 ask about organisationId spoofing
                 final var groupDatabaseKey = new DatabaseKey(organisationId, class1, groupId);
                 map.get(groupDatabaseKey).getLinks().get(targetTable).add(targetItem.getId());
             });
