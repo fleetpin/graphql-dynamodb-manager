@@ -22,7 +22,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 
 	@Test
 	public void testSimplePutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 		
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
@@ -43,8 +43,8 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 	
 	@Test
 	public void testGlobalPutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var db2 = getDatabase("test");
+		var db = getInMemoryDatabase("test");
+		var db2 = getInMemoryDatabase("test");
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());

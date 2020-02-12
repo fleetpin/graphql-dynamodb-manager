@@ -23,7 +23,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 
 	@Test
 	public void testSimpleQuery() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
@@ -41,7 +41,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 
 	@Test
 	public void testTwoTablesQuery() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
@@ -73,7 +73,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 
 	@Test
 	public void testQueryDeleteQuery() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();

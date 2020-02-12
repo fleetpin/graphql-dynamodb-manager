@@ -11,10 +11,7 @@
  */
 package com.fleetpin.graphql.dynamodb.manager;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
@@ -67,6 +64,7 @@ public class DynamoDbManager {
 		private ObjectMapper mapper;
 		private List<String> tables;
 		private Supplier<String> idGenerator;
+		private DynamoDb database;
 		
 		
 		public DyanmoDbManagerBuilder dynamoDbAsyncClient(DynamoDbAsyncClient client) {
@@ -95,6 +93,11 @@ public class DynamoDbManager {
 			this.idGenerator = idGenerator;
 			return this;
 		}
+
+		public DyanmoDbManagerBuilder dynamoDb(final DynamoDb database) {
+			this.database = database;
+			return this;
+		}
 		
 		public DynamoDbManager build() {
 			Preconditions.checkNotNull(tables, "Tables must be set");
@@ -114,9 +117,10 @@ public class DynamoDbManager {
 			if(idGenerator == null) {
 				idGenerator = () -> UUID.randomUUID().toString();
 			}
-			
-			return new DynamoDbManager(mapper, idGenerator, client, new DynamoDbImpl(mapper, tables, client, idGenerator));
-			
+
+			database = Objects.requireNonNullElse(database, new DynamoDbImpl(mapper, tables, client, idGenerator));
+
+			return new DynamoDbManager(mapper, idGenerator, client, database);
 		}
 		
 	}

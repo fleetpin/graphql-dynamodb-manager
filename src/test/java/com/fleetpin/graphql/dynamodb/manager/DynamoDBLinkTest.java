@@ -79,7 +79,7 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 	
 	@Test
 	public void testUpdate() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
@@ -105,7 +105,7 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 	
 	@Test
 	public void testDelete() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
@@ -124,7 +124,7 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 	
 	@Test
 	public void testDeleteLinks() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();

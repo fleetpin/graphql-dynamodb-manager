@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dataloader.DataLoader;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,12 +31,13 @@ import static com.fleetpin.graphql.dynamodb.manager.DynamoDbImpl.table;
 public final class InMemoryDynamoDb implements DynamoDb {
     private static final String SECONDARY_GLOBAL = "secondaryGlobal";
     private static final String SECONDARY_ORGANISATION = "secondaryOrganisation";
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final ConcurrentHashMap<DatabaseKey, DynamoItem> map;
     private final Supplier<String> idGenerator;
 
-    public InMemoryDynamoDb(final Supplier<String> idGenerator) {
-        this.map = new ConcurrentHashMap<>();
+    public InMemoryDynamoDb(final ObjectMapper objectMapper, final ConcurrentHashMap<DatabaseKey, DynamoItem> map, final Supplier<String> idGenerator) {
+        this.objectMapper = objectMapper;
+        this.map = map;
         this.idGenerator = idGenerator;
     }
 
@@ -69,7 +71,12 @@ public final class InMemoryDynamoDb implements DynamoDb {
     @Override
     public <T extends Table> CompletableFuture<T> put(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
-            final var entityId = Objects.requireNonNullElse(entity.getId(), newId());
+            entity.setId(Objects.requireNonNullElseGet(entity.getId(), () -> {
+                entity.setCreatedAt(Instant.now());
+                return newId();
+            }));
+
+            entity.setUpdatedAt(Instant.now());
 
             final var links = AttributeValue.builder().m(entity.getLinks()
                     .entries()
@@ -82,12 +89,12 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
             final var item = new HashMap<String, AttributeValue>();
             item.put("organisationId", AttributeValue.builder().s(organisationId).build());
-            item.put("id", createTableNamedKey(entity.getClass(), entityId));
+            item.put("id", createTableNamedKey(entity.getClass(), entity.getId()));
             item.put("item", TableUtil.toAttributes(objectMapper, entity));
             item.put("links", links);
             appendSecondaryItemFields(entity, item);
 
-            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entityId);
+            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
             final var dynamoItem = new DynamoItem(entity.getSourceTable(), item);
 
             map.put(databaseKey, dynamoItem);
@@ -98,7 +105,17 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public CompletableFuture<List<DynamoItem>> get(final List<DatabaseKey> keys) {
-        return CompletableFuture.supplyAsync(() -> getWithFilter(entry -> keys.stream().anyMatch(key -> foundInMap(entry, key))));
+        return CompletableFuture.supplyAsync(() -> {
+            final var filtered = getWithFilter(entry -> keys.stream().anyMatch(key -> foundInMap(entry, key)));
+
+            // DataLoader requires the same number of outputs as inputs
+            // Add nice filler
+            for (int i = 0; i < keys.size() - filtered.size(); i++) {
+                filtered.add(null);
+            }
+
+            return filtered;
+        });
     }
 
     @Override
@@ -157,19 +174,27 @@ public final class InMemoryDynamoDb implements DynamoDb {
             final List<String> groupIds
     ) {
         return CompletableFuture.supplyAsync(() -> {
-            final var databaseKey = new DatabaseKey(organisationId, entry.getClass(), entry.getId());
+            final var targetDatabaseKey = new DatabaseKey(organisationId, entry.getClass(), entry.getId());
 
-            final var targetItem = map.get(databaseKey);
+            final var targetItem = map.get(targetDatabaseKey);
             final var targetTable = table(entry.getClass());
 
             final var linkTable = table(class1);
-            targetItem.getLinks().clear();
+            final var targetLinks = targetItem.getLinks().get(linkTable);
+
+            targetLinks.forEach(linkedId -> {
+                // TODO: 12/02/20 ask about organisationId spoofing
+                final var linkedDatabaseKey = new DatabaseKey(organisationId, class1, linkedId);
+                map.get(linkedDatabaseKey).getLinks().get(targetTable).clear();
+
+                targetLinks.remove(linkedId);
+            });
+
             groupIds.forEach(groupId -> {
-                targetItem.getLinks().get(linkTable).add(groupId);
+                targetLinks.add(groupId);
 
-                // TODO: 11/02/20 ask about organisationId spoofing
+                // TODO: 12/02/20 ask about organisationId spoofing
                 final var groupDatabaseKey = new DatabaseKey(organisationId, class1, groupId);
-
                 map.get(groupDatabaseKey).getLinks().get(targetTable).add(targetItem.getId());
             });
 
@@ -181,7 +206,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
 
     @Override
     public int maxBatchSize() {
-        return 50 / map.size();
+        return 1;
     }
 
     @Override
@@ -220,7 +245,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
     }
 
     private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseQueryKey key) {
-        return key.getType().equals(entry.getKey().getType()) &&
+        return key.getType().isAssignableFrom(entry.getKey().getType()) &&
                 (entry.getKey().getOrganisationId().equals("global") || key.getOrganisationId().equals(entry.getKey().getOrganisationId()));
     }
 }

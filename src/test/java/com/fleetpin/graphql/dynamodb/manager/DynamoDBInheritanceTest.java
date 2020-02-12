@@ -27,7 +27,7 @@ public class DynamoDBInheritanceTest extends DynamoDBBase {
 
 	@Test
 	public void testSimplePutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 
 		db.put(new NameTable("garry")).get();
 		db.put(new AgeTable("19")).get();

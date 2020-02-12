@@ -63,7 +63,7 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 
 	@Test
 	public void testSecondary() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
+		var db = getInMemoryDatabase("test");
 		
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
@@ -76,6 +76,7 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", list.get(0).getName());
 		Assertions.assertEquals("garry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getName());
 	}
+
 	@Test
 	public void testSecondaryInheritance() throws InterruptedException, ExecutionException {
 		var db = getDatabase("test");
@@ -95,6 +96,7 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 		Assertions.assertEquals("barry", list.get(0).getGlobalLookup());
 		Assertions.assertEquals("barry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getGlobalLookup());
 	}
+
 	static class SimpleTable extends Table {
 		private String name;
 		private String globalLookup;

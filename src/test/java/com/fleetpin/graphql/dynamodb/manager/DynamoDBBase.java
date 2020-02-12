@@ -13,9 +13,19 @@ package com.fleetpin.graphql.dynamodb.manager;
 
 import java.net.ServerSocket;
 import java.net.URI;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
@@ -32,6 +42,7 @@ import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 public class DynamoDBBase {
 
 	private DynamoDBProxyServer server;
+	private DynamoDbManager local;
 	private DynamoDbManager stage;
 	private DynamoDbManager production;
 	private CompletableFuture<Void> finished;
@@ -68,6 +79,7 @@ public class DynamoDBBase {
 						).provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
 				).get();
 	}
+
 	@BeforeEach
 	public void setup() throws Exception {
 		finished = new CompletableFuture<Void>();
@@ -83,11 +95,17 @@ public class DynamoDBBase {
 
 		createTable(async, "stage");
 		createTable(async, "prod");
-		
+
+		final var objectMapper = new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).registerModule(new ParameterNamesModule())
+				.registerModule(new Jdk8Module())
+				.registerModule(new JavaTimeModule())
+				.disable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS).disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).disable(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS).disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
+				.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+		final var concurrentHashMap = new ConcurrentHashMap<DatabaseKey, DynamoItem>();
+
+		this.local = DynamoDbManager.builder().tables("local").dynamoDb(new InMemoryDynamoDb(objectMapper, concurrentHashMap, () -> UUID.randomUUID().toString())).build();
 		this.stage = DynamoDbManager.builder().tables("prod", "stage").dynamoDbAsyncClient(async).build();
 		this.production = DynamoDbManager.builder().tables("prod").dynamoDbAsyncClient(async).build();
-		
-		
 	}
 	
 	public DynamoDbAsyncClient getAsync() {
@@ -107,10 +125,16 @@ public class DynamoDBBase {
 		db.start(finished);
 		return db;
 	}
+
 	public Database getDatabaseProduction(String organisationId) {
 		var db = production.getDatabase(organisationId);
 		db.start(finished);
 		return db;
 	}
 
+	public Database getInMemoryDatabase(final String organisationId) {
+		final var db = local.getDatabase(organisationId);
+		db.start(finished);
+		return db;
+	}
 }
