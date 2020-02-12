@@ -23,7 +23,7 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testGlobal(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
@@ -63,7 +63,7 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testSecondary(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();

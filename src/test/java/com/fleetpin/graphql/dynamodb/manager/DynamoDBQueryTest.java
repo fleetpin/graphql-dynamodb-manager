@@ -24,7 +24,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testSimpleQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
@@ -43,7 +43,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testTwoTablesQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
@@ -76,7 +76,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testQueryDeleteQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();

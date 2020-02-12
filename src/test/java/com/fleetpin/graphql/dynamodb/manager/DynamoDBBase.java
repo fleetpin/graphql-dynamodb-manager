@@ -101,7 +101,7 @@ public class DynamoDBBase {
 		this.stage = DynamoDbManager.builder().tables("prod", "stage").dynamoDbAsyncClient(async).build();
 		this.production = DynamoDbManager.builder().tables("prod").dynamoDbAsyncClient(async).build();
 	}
-	
+
 	public DynamoDbAsyncClient getAsync() {
 		return async;
 	}
@@ -111,14 +111,6 @@ public class DynamoDBBase {
 		finished.complete(null);
 		server.stop();
 	}
-	
-	//TODO: add in memory option that we can also use to speed up testing. Should be able to paramatise tests once implemented
-	
-	public Database getDatabase(String organisationId) {
-		var db = stage.getDatabase(organisationId);
-		db.start(finished);
-		return db;
-	}
 
 	public Database getDatabaseProduction(String organisationId) {
 		var db = production.getDatabase(organisationId);
@@ -126,25 +118,16 @@ public class DynamoDBBase {
 		return db;
 	}
 
-	public Database getInMemoryDatabase(final String organisationId) {
-		final var db = local.getDatabase(organisationId);
-		db.start(finished);
-		return db;
+	public Database getDatabase(String organisationId) {
+		return getDatabase(organisationId, DatabaseType.EMBEDDED);
 	}
 
-	public Database createTestDatabase(final DatabaseType dbType, final String organisationId) {
-		Database db;
-		switch (dbType) {
-			case IN_MEMORY:
-				db = getInMemoryDatabase(organisationId);
-				break;
-			case EMBEDDED:
-				db = getDatabase(organisationId);
-				break;
-			default:
-				db = null;
-		}
-		
+	public Database getDatabase(final String organisationId, final DatabaseType dbType) {
+		final var db = dbType.equals(DatabaseType.IN_MEMORY) ?
+				local.getDatabase(organisationId) :
+				stage.getDatabase(organisationId);
+
+		db.start(finished);
 		return db;
 	}
 }

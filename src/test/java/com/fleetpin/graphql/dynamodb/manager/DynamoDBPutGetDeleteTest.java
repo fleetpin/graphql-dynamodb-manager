@@ -24,7 +24,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 		
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
@@ -46,8 +46,8 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testGlobalPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
-		final var db2 = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
+		final var db2 = getDatabase("test", dbType);
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -164,8 +164,8 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testTwoOrganisationsPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
-		final var db2 = createTestDatabase(dbType, "test2");
+		final var db = getDatabase("test", dbType);
+		final var db2 = getDatabase("test2", dbType);
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());

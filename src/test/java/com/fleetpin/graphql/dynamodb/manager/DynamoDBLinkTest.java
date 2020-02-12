@@ -81,7 +81,7 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testUpdate(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
@@ -108,7 +108,7 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
@@ -128,7 +128,7 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testDeleteLinks(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 		
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();

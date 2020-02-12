@@ -27,7 +27,7 @@ public class DynamoDBInheritanceTest extends DynamoDBBase {
 	@ParameterizedTest
 	@EnumSource(DatabaseType.class)
 	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = createTestDatabase(dbType, "test");
+		final var db = getDatabase("test", dbType);
 
 		db.put(new NameTable("garry")).get();
 		db.put(new AgeTable("19")).get();
