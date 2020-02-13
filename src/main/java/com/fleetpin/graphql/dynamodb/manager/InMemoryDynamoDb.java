@@ -58,12 +58,12 @@ public final class InMemoryDynamoDb implements DynamoDb {
     public <T extends Table> CompletableFuture<T> deleteLinks(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
             final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
-
             final var item = map.get(databaseKey);
+
+            map.forEach((key, value) -> value.getLinks().get(table(entity.getClass())).clear());
             item.getLinks().clear();
 
             entity.getLinks().clear();
-
             return entity;
         });
     }
