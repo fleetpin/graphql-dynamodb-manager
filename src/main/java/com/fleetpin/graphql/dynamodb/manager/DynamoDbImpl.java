@@ -193,7 +193,7 @@ public class DynamoDbImpl implements DynamoDb {
 
 	public CompletableFuture<List<DynamoItem>> query(DatabaseQueryKey key) {
 		var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
-		var id = AttributeValue.builder().s(table(key.getType())).build();
+		var id = AttributeValue.builder().s(table(key.getType()) + ":").build();
 		
 		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
