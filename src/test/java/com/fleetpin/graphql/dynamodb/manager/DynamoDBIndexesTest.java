@@ -20,8 +20,7 @@ import java.util.concurrent.ExecutionException;
 
 public class DynamoDBIndexesTest extends DynamoDBBase {
 
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testGlobal(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 
@@ -60,8 +59,7 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 	}
 
 
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testSecondary(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 

@@ -21,8 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 public class DynamoDBQueryTest extends DynamoDBBase {
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testSimpleQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 
@@ -40,8 +39,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", entries.get(2).name);
 	}
 
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testTwoTablesQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 
@@ -71,10 +69,7 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 
 	}
 
-
-
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testQueryDeleteQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 

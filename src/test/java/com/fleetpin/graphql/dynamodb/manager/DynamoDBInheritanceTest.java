@@ -24,8 +24,7 @@ import org.junit.jupiter.params.provider.*;
 
 public class DynamoDBInheritanceTest extends DynamoDBBase {
 
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 

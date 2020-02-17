@@ -21,8 +21,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 		
@@ -43,8 +42,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		Assertions.assertNull(entry1);
 	}
 
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testGlobalPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 		final var db2 = getDatabase("test", dbType);
@@ -161,8 +159,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		
 	}
 
-	@ParameterizedTest
-	@EnumSource(DatabaseType.class)
+	@TestLocalDatabase
 	public void testTwoOrganisationsPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
 		final var db = getDatabase("test", dbType);
 		final var db2 = getDatabase("test2", dbType);
