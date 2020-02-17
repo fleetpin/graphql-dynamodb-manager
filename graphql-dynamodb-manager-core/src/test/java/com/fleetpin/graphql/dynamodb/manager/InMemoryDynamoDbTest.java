@@ -47,9 +47,9 @@ final class InMemoryDynamoDbTest {
 
     @Test
     void shouldBeAbleToPutWithNullIdAndGenerateUsingGenerator() throws ExecutionException, InterruptedException {
-        inMemoryDynamoDb.put("organisation-0", new DynamoDBQueryTest.SimpleTable("name")).get();
+        inMemoryDynamoDb.put("organisation-0", new NameTable("name")).get();
 
-        final var databaseKeys = new DatabaseKey("organisation-0", DynamoDBQueryTest.SimpleTable.class, "generated-id");
+        final var databaseKeys = new DatabaseKey("organisation-0", NameTable.class, "generated-id");
         final var items = inMemoryDynamoDb.get(List.of(databaseKeys)).get();
 
         assertEquals("generated-id", items.get(0).getId());
@@ -126,9 +126,9 @@ final class InMemoryDynamoDbTest {
 
     @Test
     void shouldBeAbleToFindUsingGlobalQuery() throws ExecutionException, InterruptedException {
-        inMemoryDynamoDb.put("organisation-id", new DynamoDBIndexesTest.SimpleTable("name-0", "lookup-0")).get();
+        inMemoryDynamoDb.put("organisation-id", new GlobalLookupTable("name-0", "lookup-0")).get();
 
-        final var items = inMemoryDynamoDb.queryGlobal(DynamoDBIndexesTest.SimpleTable.class, "lookup-0").get();
+        final var items = inMemoryDynamoDb.queryGlobal(GlobalLookupTable.class, "lookup-0").get();
 
         assertFalse(items.isEmpty());
         assertEquals("generated-id", items.get(0).getId());
@@ -136,9 +136,9 @@ final class InMemoryDynamoDbTest {
 
     @Test
     void shouldBeAbleToFindUsingSecondaryQuery() throws ExecutionException, InterruptedException {
-        inMemoryDynamoDb.put("organisation-0", new DynamoDBIndexesTest.SimpleTable("name-0", "lookup-0")).get();
+        inMemoryDynamoDb.put("organisation-0", new GlobalLookupTable("name-0", "lookup-0")).get();
 
-        final var items = inMemoryDynamoDb.querySecondary(DynamoDBIndexesTest.SimpleTable.class, "organisation-0", "name-0").get();
+        final var items = inMemoryDynamoDb.querySecondary(GlobalLookupTable.class, "organisation-0", "name-0").get();
 
         assertFalse(items.isEmpty());
         assertEquals("generated-id", items.get(0).getId());
@@ -200,6 +200,41 @@ final class InMemoryDynamoDbTest {
         @Override
         public String getId() {
             return id;
+        }
+    }
+
+    static final class GlobalLookupTable extends Table {
+        private String name;
+        private String globalLookup;
+
+        public GlobalLookupTable(String name, String globalLookup) {
+            this.name = name;
+            this.globalLookup = globalLookup;
+        }
+
+        @SecondaryIndex
+        public String getName() {
+            return name;
+        }
+
+        @GlobalIndex
+        public String getGlobalLookup() {
+            return globalLookup;
+        }
+    }
+
+    static final class NameTable extends Table {
+        private String name;
+
+        public NameTable() {
+        }
+
+        public NameTable(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
         }
     }
 }

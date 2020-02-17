@@ -12,6 +12,7 @@
 
     <modules>
         <module>graphql-dynamodb-manager-core</module>
+        <module>graphql-dynamodb-manager-test</module>
     </modules>
 
     <distributionManagement>

@@ -36,7 +36,11 @@ public final class InMemoryDynamoDb implements DynamoDb {
     private final ConcurrentHashMap<DatabaseKey, DynamoItem> map;
     private final Supplier<String> idGenerator;
 
-    public InMemoryDynamoDb(final ObjectMapper objectMapper, final ConcurrentHashMap<DatabaseKey, DynamoItem> map, final Supplier<String> idGenerator) {
+    public InMemoryDynamoDb(
+            final ObjectMapper objectMapper,
+            final ConcurrentHashMap<DatabaseKey, DynamoItem> map,
+            final Supplier<String> idGenerator
+    ) {
         this.objectMapper = objectMapper;
         this.map = map;
         this.idGenerator = idGenerator;

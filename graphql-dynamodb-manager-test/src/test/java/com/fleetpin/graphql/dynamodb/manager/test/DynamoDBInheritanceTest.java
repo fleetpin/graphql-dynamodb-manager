@@ -10,11 +10,14 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.test;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fleetpin.graphql.dynamodb.manager.Database;
+import com.fleetpin.graphql.dynamodb.manager.Table;
+import com.fleetpin.graphql.dynamodb.manager.TableName;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.Comparator;
@@ -23,7 +26,7 @@ import java.util.concurrent.ExecutionException;
 final class DynamoDBInheritanceTest {
 
 	@TestDatabase
-	final void testSimplePutGetDelete(final Database db) throws InterruptedException, ExecutionException {
+	void testSimplePutGetDelete(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new NameTable("garry")).get();
 		db.put(new AgeTable("19")).get();
 

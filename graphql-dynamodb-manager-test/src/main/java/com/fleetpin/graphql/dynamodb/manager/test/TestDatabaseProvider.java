@@ -10,9 +10,11 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.test;
 
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
+import com.fleetpin.graphql.dynamodb.manager.DatabaseKey;
+import com.fleetpin.graphql.dynamodb.manager.DynamoItem;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;

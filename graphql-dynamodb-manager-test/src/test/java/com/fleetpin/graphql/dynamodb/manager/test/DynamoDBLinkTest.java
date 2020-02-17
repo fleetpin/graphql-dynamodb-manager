@@ -10,8 +10,10 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.test;
 
+import com.fleetpin.graphql.dynamodb.manager.Database;
+import com.fleetpin.graphql.dynamodb.manager.Table;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.Comparator;
@@ -20,7 +22,7 @@ import java.util.concurrent.ExecutionException;
 final class DynamoDBLinkTest {
 
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	final void testSimpleQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testSimpleQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 		var frank = dbProd.put(new SimpleTable("frank")).get();
@@ -47,7 +49,7 @@ final class DynamoDBLinkTest {
 	}
 
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	final void testDoubleLinkage(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testDoubleLinkage(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var frank = dbProd.put(new SimpleTable("frank")).get();
 		var bob = dbProd.put(new AnotherTable("bob")).get();
@@ -70,7 +72,7 @@ final class DynamoDBLinkTest {
 
 
 	@TestDatabase
-	final void testUpdate(final Database db) throws InterruptedException, ExecutionException {
+	void testUpdate(final Database db) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 		var bob = db.put(new AnotherTable("bob")).get();
@@ -94,7 +96,7 @@ final class DynamoDBLinkTest {
 
 
 	@TestDatabase
-	final void testDelete(final Database db) throws InterruptedException, ExecutionException {
+	void testDelete(final Database db) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 
@@ -111,7 +113,7 @@ final class DynamoDBLinkTest {
 	}
 
 	@TestDatabase
-	final void testDeleteLinks(final Database db) throws InterruptedException, ExecutionException {
+	void testDeleteLinks(final Database db) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 

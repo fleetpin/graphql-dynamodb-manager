@@ -10,8 +10,12 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.test;
 
+import com.fleetpin.graphql.dynamodb.manager.Database;
+import com.fleetpin.graphql.dynamodb.manager.GlobalIndex;
+import com.fleetpin.graphql.dynamodb.manager.SecondaryIndex;
+import com.fleetpin.graphql.dynamodb.manager.Table;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.concurrent.ExecutionException;
@@ -19,7 +23,7 @@ import java.util.concurrent.ExecutionException;
 final class DynamoDBIndexesTest {
 
 	@TestDatabase
-	final void testGlobal(final Database db) throws InterruptedException, ExecutionException {
+	void testGlobal(final Database db) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -33,7 +37,7 @@ final class DynamoDBIndexesTest {
 	}
 
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	final void testGlobalInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testGlobalInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = dbProd.put(entry1).get();
 
@@ -54,7 +58,7 @@ final class DynamoDBIndexesTest {
 
 
 	@TestDatabase
-	final void testSecondary(final Database db) throws InterruptedException, ExecutionException {
+	void testSecondary(final Database db) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -68,7 +72,7 @@ final class DynamoDBIndexesTest {
 	}
 
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	final void testSecondaryInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testSecondaryInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = dbProd.put(entry1).get();
 
@@ -85,7 +89,7 @@ final class DynamoDBIndexesTest {
 		Assertions.assertEquals("barry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getGlobalLookup());
 	}
 
-	static class SimpleTable extends Table {
+	public static class SimpleTable extends Table {
 		private String name;
 		private String globalLookup;
 

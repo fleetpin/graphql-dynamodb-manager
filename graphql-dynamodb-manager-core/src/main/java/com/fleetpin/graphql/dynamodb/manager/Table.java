@@ -40,10 +40,10 @@ public abstract class Table {
 		this.id = id;
 	}
 	
-	final void setCreatedAt(Instant createdAt) {
+	void setCreatedAt(Instant createdAt) {
 		this.createdAt = createdAt;
 	}
-	final void setUpdatedAt(Instant updatedAt) {
+	void setUpdatedAt(Instant updatedAt) {
 		this.updatedAt = updatedAt;
 	}
 	public final Instant getCreatedAt() {

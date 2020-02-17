@@ -10,8 +10,10 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.test;
 
+import com.fleetpin.graphql.dynamodb.manager.Database;
+import com.fleetpin.graphql.dynamodb.manager.Table;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.concurrent.ExecutionException;
@@ -19,7 +21,7 @@ import java.util.concurrent.ExecutionException;
 final class DynamoDBPutGetDeleteTest {
 
 	@TestDatabase
-	final void testSimplePutGetDelete(final Database db) throws InterruptedException, ExecutionException {
+	void testSimplePutGetDelete(final Database db) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -38,7 +40,7 @@ final class DynamoDBPutGetDeleteTest {
 	}
 
 	@TestDatabase(organisationIds = {"test", "test"})
-	final void testGlobalPutGetDelete(final Database db, final Database db2) throws InterruptedException, ExecutionException {
+	void testGlobalPutGetDelete(final Database db, final Database db2) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -66,7 +68,7 @@ final class DynamoDBPutGetDeleteTest {
 	}
 	
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	final void testClimbingSimplePutGetDelete(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testClimbingSimplePutGetDelete(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = dbProd.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -103,7 +105,7 @@ final class DynamoDBPutGetDeleteTest {
 	}
 	
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	final void testClimbingGlobalPutGetDelete(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testClimbingGlobalPutGetDelete(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = dbProd.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -145,7 +147,7 @@ final class DynamoDBPutGetDeleteTest {
 	}
 
 	@TestDatabase(organisationIds = {"test", "test2"})
-	final void testTwoOrganisationsPutGetDelete(final Database db, final Database db2) throws InterruptedException, ExecutionException {
+	void testTwoOrganisationsPutGetDelete(final Database db, final Database db2) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());

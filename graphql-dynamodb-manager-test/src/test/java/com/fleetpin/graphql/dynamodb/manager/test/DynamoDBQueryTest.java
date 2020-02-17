@@ -10,8 +10,10 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.test;
 
+import com.fleetpin.graphql.dynamodb.manager.Database;
+import com.fleetpin.graphql.dynamodb.manager.Table;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.Comparator;
@@ -77,7 +79,7 @@ final class DynamoDBQueryTest {
 		Assertions.assertEquals("frank", entries.get(1).name);
 		Assertions.assertEquals("garry", entries.get(2).name);
 
-		db.delete(entries.get(1), false);
+		db.delete(entries.get(1), false).get();
 
 		entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(2, entries.size());
