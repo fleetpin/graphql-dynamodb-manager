@@ -12,18 +12,13 @@
 package com.fleetpin.graphql.dynamodb.manager;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.concurrent.ExecutionException;
 
-public class DynamoDBIndexesTest extends DynamoDBBase {
+public class DynamoDBIndexesTest {
 
-	@TestLocalDatabase
-	public void testGlobal(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-
+	@TestDatabase
+	public void testGlobal(final Database db) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -36,12 +31,10 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", db.queryGlobalUnique(SimpleTable.class, "john").get().getName());
 	}
 
-	@Test
-	public void testGlobalInheritance() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var prod = getDatabaseProduction("test");
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testGlobalInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
-		entry1 = prod.put(entry1).get();
+		entry1 = dbProd.put(entry1).get();
 
 		SimpleTable entry2 = new SimpleTable("barry", "john");
 		entry2.setId(entry1.getId());
@@ -59,10 +52,8 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 	}
 
 
-	@TestLocalDatabase
-	public void testSecondary(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-
+	@TestDatabase
+	public void testSecondary(final Database db) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -75,12 +66,10 @@ public class DynamoDBIndexesTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getName());
 	}
 
-	@Test
-	public void testSecondaryInheritance() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var prod = getDatabaseProduction("test");
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testSecondaryInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
-		entry1 = prod.put(entry1).get();
+		entry1 = dbProd.put(entry1).get();
 
 		SimpleTable entry2 = new SimpleTable("garry", "barry");
 		entry2.setId(entry1.getId());

@@ -11,20 +11,14 @@
  */
 package com.fleetpin.graphql.dynamodb.manager;
 
+import org.junit.jupiter.api.Assertions;
+
 import java.util.concurrent.ExecutionException;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+public class DynamoDBPutGetDeleteTest {
 
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-
-public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
-
-	@TestLocalDatabase
-	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-		
+	@TestDatabase
+	public void testSimplePutGetDelete(final Database db) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -42,10 +36,8 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		Assertions.assertNull(entry1);
 	}
 
-	@TestLocalDatabase
-	public void testGlobalPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-		final var db2 = getDatabase("test", dbType);
+	@TestDatabase(organisationIds = {"test", "test"})
+	public void testGlobalPutGetDelete(final Database db, final Database db2) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -72,13 +64,10 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		Assertions.assertEquals(id, entry1.getId());
 	}
 	
-	@Test
-	public void testClimbingSimplePutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var prod = getDatabaseProduction("test");
-		
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testClimbingSimplePutGetDelete(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
-		entry1 = prod.put(entry1).get();
+		entry1 = dbProd.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
 		
@@ -93,7 +82,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertNull(entry1);
 		
-		entry1 = prod.get(SimpleTable.class, id).get();
+		entry1 = dbProd.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
@@ -102,7 +91,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		entry2.setId(entry1.getId());
 		db.put(entry2).get();
 		
-		entry1 = prod.get(SimpleTable.class, id).get();
+		entry1 = dbProd.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
 		
@@ -110,17 +99,12 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("two", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
-		
 	}
 	
-	@Test
-	public void testClimbingGlobalPutGetDelete() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var prod = getDatabaseProduction("test");
-		
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testClimbingGlobalPutGetDelete(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
-		entry1 = prod.putGlobal(entry1).get();
+		entry1 = dbProd.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
 		
@@ -138,7 +122,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
 		
-		entry1 = prod.get(SimpleTable.class, id).get();
+		entry1 = dbProd.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
@@ -147,7 +131,7 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		entry2.setId(entry1.getId());
 		db.put(entry2).get();
 		
-		entry1 = prod.get(SimpleTable.class, id).get();
+		entry1 = dbProd.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
 		
@@ -159,10 +143,8 @@ public class DynamoDBPutGetDeleteTest extends DynamoDBBase {
 		
 	}
 
-	@TestLocalDatabase
-	public void testTwoOrganisationsPutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-		final var db2 = getDatabase("test2", dbType);
+	@TestDatabase(organisationIds = {"test", "test2"})
+	public void testTwoOrganisationsPutGetDelete(final Database db, final Database db2) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());

@@ -11,20 +11,14 @@
  */
 package com.fleetpin.graphql.dynamodb.manager;
 
+import org.junit.jupiter.api.Assertions;
+
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-
-public class DynamoDBQueryTest extends DynamoDBBase {
-	@TestLocalDatabase
-	public void testSimpleQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-
+public class DynamoDBQueryTest {
+	@TestDatabase
+	public void testSimpleQuery(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
 		db.put(new SimpleTable("frank")).get();
@@ -39,16 +33,14 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", entries.get(2).name);
 	}
 
-	@TestLocalDatabase
-	public void testTwoTablesQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-
+	@TestDatabase
+	public void testTwoTablesQuery(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
 		db.put(new SimpleTable("frank")).get();
 
-		db.put(new AnotherTable("ed"));
-		db.put(new AnotherTable("eddie"));
+		db.put(new AnotherTable("ed")).get();
+		db.put(new AnotherTable("eddie")).get();
 
 		var entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(3, entries.size());
@@ -69,10 +61,8 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 
 	}
 
-	@TestLocalDatabase
-	public void testQueryDeleteQuery(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-
+	@TestDatabase
+	public void testQueryDeleteQuery(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
 		db.put(new SimpleTable("frank")).get();
@@ -99,17 +89,13 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 	}
 
 
-	@Test
-	public void testClimbingQuery() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var prod = getDatabaseProduction("test");
-
-
-		var garry = prod.put(new SimpleTable("garry")).get();
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testClimbingQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+		var garry = dbProd.put(new SimpleTable("garry")).get();
 		var garryLocal = new SimpleTable("GARRY");
 		garryLocal.setId(garry.getId());
 		db.put(garryLocal);
-		prod.put(new SimpleTable("bob")).get();
+		dbProd.put(new SimpleTable("bob")).get();
 		db.put(new SimpleTable("frank")).get();
 
 		var entries = db.query(SimpleTable.class).get();
@@ -133,17 +119,13 @@ public class DynamoDBQueryTest extends DynamoDBBase {
 
 	}
 
-	@Test
-	public void testClimbingGlobalQuery() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var prod = getDatabaseProduction("test");
-
-
-		var garry = prod.put(new SimpleTable("garry")).get();
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testClimbingGlobalQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+		var garry = dbProd.put(new SimpleTable("garry")).get();
 		var garryLocal = new SimpleTable("GARRY");
 		garryLocal.setId(garry.getId());
 		db.put(garryLocal);
-		prod.put(new SimpleTable("bob")).get();
+		dbProd.put(new SimpleTable("bob")).get();
 		db.putGlobal(new SimpleTable("frank")).get();
 
 		var entries = db.query(SimpleTable.class).get();

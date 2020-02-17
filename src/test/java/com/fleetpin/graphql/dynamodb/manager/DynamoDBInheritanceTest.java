@@ -11,23 +11,18 @@
  */
 package com.fleetpin.graphql.dynamodb.manager;
 
-import java.util.Comparator;
-import java.util.concurrent.ExecutionException;
-
-import org.junit.jupiter.api.Assertions;
-
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.*;
+import org.junit.jupiter.api.Assertions;
 
-public class DynamoDBInheritanceTest extends DynamoDBBase {
+import java.util.Comparator;
+import java.util.concurrent.ExecutionException;
 
-	@TestLocalDatabase
-	public void testSimplePutGetDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
+public class DynamoDBInheritanceTest {
 
+	@TestDatabase
+	public void testSimplePutGetDelete(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new NameTable("garry")).get();
 		db.put(new AgeTable("19")).get();
 
@@ -39,13 +34,10 @@ public class DynamoDBInheritanceTest extends DynamoDBBase {
 		Assertions.assertEquals("garry", ((NameTable)entries.get(1)).getName());
 	}
 
-
-
-
 	@TableName("base")
 	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
-	@JsonSubTypes({ 
-		@Type(value = NameTable.class, name = "name"), 
+	@JsonSubTypes({
+		@Type(value = NameTable.class, name = "name"),
 		@Type(value = AgeTable.class, name = "age")
 	})
 	static abstract class BaseTable extends Table {

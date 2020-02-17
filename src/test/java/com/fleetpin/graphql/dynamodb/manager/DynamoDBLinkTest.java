@@ -11,27 +11,20 @@
  */
 package com.fleetpin.graphql.dynamodb.manager;
 
+import org.junit.jupiter.api.Assertions;
+
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+public class DynamoDBLinkTest {
 
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-
-public class DynamoDBLinkTest extends DynamoDBBase {
-
-	@Test
-	public void testSimpleQuery() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var dbProd = getDatabaseProduction("test");
-		
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testSimpleQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 		var frank = dbProd.put(new SimpleTable("frank")).get();
 		var bob = dbProd.put(new AnotherTable("bob")).get();
-		
+
 		db.link(garry, bob.getClass(), bob.getId()).get();
 		dbProd.link(frank, bob.getClass(), bob.getId()).get();
 		db.link(garry, john.getClass(), john.getId()).get();
@@ -40,112 +33,103 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 		frank = db.get(SimpleTable.class, frank.getId()).get();
 		john = db.get(AnotherTable.class, john.getId()).get();
 		bob = db.get(AnotherTable.class, bob.getId()).get();
-		
+
 		var johnLink = db.getLink(john, SimpleTable.class).get();
 		Assertions.assertEquals("garry", johnLink.name);
-		
+
 		var bobLinks = db.getLinks(bob, SimpleTable.class).get();
-		
+
 		Assertions.assertEquals(1, bobLinks.size());
 		bobLinks.sort(Comparator.comparing(a -> a.name));
-		
+
 		Assertions.assertEquals("frank", bobLinks.get(0).name);
 	}
-	
-	@Test
-	public void testDoubleLinkage() throws InterruptedException, ExecutionException {
-		var db = getDatabase("test");
-		var dbProd = getDatabaseProduction("test");
-		
+
+	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	public void testDoubleLinkage(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var frank = dbProd.put(new SimpleTable("frank")).get();
 		var bob = dbProd.put(new AnotherTable("bob")).get();
-		
+
 		db.link(garry, bob.getClass(), bob.getId()).get();
 		dbProd.link(frank, bob.getClass(), bob.getId()).get();
 
 		garry = db.get(SimpleTable.class, garry.getId()).get();
 		frank = db.get(SimpleTable.class, frank.getId()).get();
 		bob = db.get(AnotherTable.class, bob.getId()).get();
-		
+
 		var bobLinks = db.getLinks(bob, SimpleTable.class).get();
-		
+
 		Assertions.assertEquals(2, bobLinks.size());
 		bobLinks.sort(Comparator.comparing(a -> a.name));
-		
+
 		Assertions.assertEquals("frank", bobLinks.get(0).name);
 		Assertions.assertEquals("garry", bobLinks.get(1).name);
 	}
 
 
-	@TestLocalDatabase
-	public void testUpdate(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-		
+	@TestDatabase
+	public void testUpdate(final Database db) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 		var bob = db.put(new AnotherTable("bob")).get();
-		
+
 		db.link(garry, john.getClass(), john.getId()).get();
 		db.link(garry, bob.getClass(), bob.getId()).get();
 
 		garry = db.get(SimpleTable.class, garry.getId()).get();
 		john = db.get(AnotherTable.class, john.getId()).get();
 		bob = db.get(AnotherTable.class, bob.getId()).get();
-		
+
 		var bobLinks = db.getLink(bob, SimpleTable.class).get();
 		Assertions.assertEquals("garry", bobLinks.name);
 
 		var garryLink = db.getLink(garry, AnotherTable.class).get();
 		Assertions.assertEquals("bob", garryLink.getName());
-		
+
 		var johnLink = db.getLinks(john, SimpleTable.class).get();
 		Assertions.assertEquals(0, johnLink.size());
 	}
 
 
-	@TestLocalDatabase
-	public void testDelete(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-		
+	@TestDatabase
+	public void testDelete(final Database db) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
-		
+
 		db.link(garry, john.getClass(), john.getId()).get();
 
 		Assertions.assertThrows(RuntimeException.class, () -> {
 			db.delete(garry, false).get();
 		});
-		
+
 		db.delete(garry, true).get();
-		
+
 		var list = db.getLinks(john, SimpleTable.class).get();
 		Assertions.assertEquals(0, list.size());
 	}
 
-	@TestLocalDatabase
-	public void testDeleteLinks(final DatabaseType dbType) throws InterruptedException, ExecutionException {
-		final var db = getDatabase("test", dbType);
-		
+	@TestDatabase
+	public void testDeleteLinks(final Database db) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 
-		
+
 		garry = db.link(garry, john.getClass(), john.getId()).get();
 
 		garry = db.deleteLinks(garry).get();
-		
+
 		garry = db.get(SimpleTable.class, garry.getId()).get();
-		
+
 		var list = db.getLinks(john, SimpleTable.class).get();
 		Assertions.assertEquals(0, list.size());
-		
+
 		var list2 = db.getLinks(garry, AnotherTable.class).get();
 		Assertions.assertEquals(0, list2.size());
-		
+
 	}
-	
-	
+
+
 	static class SimpleTable extends Table {
 		private String name;
 
@@ -175,5 +159,5 @@ public class DynamoDBLinkTest extends DynamoDBBase {
 			return name;
 		}
 	}
-	
+
 }
