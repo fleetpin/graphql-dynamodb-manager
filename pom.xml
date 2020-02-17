@@ -15,19 +15,6 @@
         <module>graphql-dynamodb-manager-test</module>
     </modules>
 
-    <distributionManagement>
-        <snapshotRepository>
-            <id>sonatype</id>
-            <name>central snapshot</name>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
-        <repository>
-            <id>sonatype</id>
-            <name>central release</name>
-            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
-        </repository>
-    </distributionManagement>
-
     <scm>
         <url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
         <connection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</connection>
