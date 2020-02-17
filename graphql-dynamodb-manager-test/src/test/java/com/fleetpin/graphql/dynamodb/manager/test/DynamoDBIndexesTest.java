@@ -78,9 +78,7 @@ final class DynamoDBIndexesTest {
 
 		SimpleTable entry2 = new SimpleTable("garry", "barry");
 		entry2.setId(entry1.getId());
-		db.put(entry2);
-
-
+		db.put(entry2).get();
 
 		var list = db.querySecondary(SimpleTable.class, "garry").get();
 		Assertions.assertEquals(1, list.size());

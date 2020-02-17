@@ -31,6 +31,10 @@ import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/*
+ * In the case that you are looking for testing around more DynamoDb behaviour,
+ * look in graphql-dynamodb-manager-test tests.
+ */
 final class InMemoryDynamoDbTest {
     private InMemoryDynamoDb inMemoryDynamoDb;
 
