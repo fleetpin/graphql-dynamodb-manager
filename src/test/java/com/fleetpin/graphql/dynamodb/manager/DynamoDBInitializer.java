@@ -11,6 +11,8 @@
  */
 package com.fleetpin.graphql.dynamodb.manager;
 
+import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
+import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -22,13 +24,17 @@ import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 
-public final class DynamoDBInitializer {
+final class DynamoDBInitializer {
     @SuppressWarnings("unchecked")
     static void createTable(final DynamoDbAsyncClient client, final String name) throws ExecutionException, InterruptedException {
         client.createTable(t -> t.tableName(name).keySchema(
@@ -61,14 +67,36 @@ public final class DynamoDBInitializer {
         ).get();
     }
 
-    public static Database getProductionDatabase(
+    static DynamoDBProxyServer startDynamoServer(final String port) throws Exception {
+        final String[] localArgs = {"-inMemory", "-port", port};
+        final var server = ServerRunner.createServerFromCommandLineArgs(localArgs);
+        server.start();
+
+        return server;
+    }
+
+    static DynamoDbAsyncClient startDynamoClient(final String port) throws URISyntaxException {
+        return DynamoDbAsyncClient.builder()
+                .endpointOverride(new URI("http://localhost:" + port))
+                .build();
+    }
+
+    static String findFreePort() throws IOException {
+        final var serverSocket = new ServerSocket(0);
+        final var port = String.valueOf(serverSocket.getLocalPort());
+        serverSocket.close();
+
+        return port;
+    }
+
+    static Database getProductionDatabase(
             final String organisationId,
-            final DynamoDbAsyncClient async,
+            final DynamoDbAsyncClient client,
             final CompletableFuture<Object> future
     ) {
         final var database = DynamoDbManager.builder()
                 .tables("prod")
-                .dynamoDbAsyncClient(async)
+                .dynamoDbAsyncClient(client)
                 .build()
                 .getDatabase(organisationId);
         database.start(future);
@@ -76,14 +104,14 @@ public final class DynamoDBInitializer {
         return database;
     }
 
-    public static Database getEmbeddedDatabase(
+    static Database getEmbeddedDatabase(
             final String organisationId,
-            final DynamoDbAsyncClient async,
+            final DynamoDbAsyncClient client,
             final CompletableFuture<Object> future
     ) {
         final var database = DynamoDbManager.builder()
                 .tables("prod", "stage")
-                .dynamoDbAsyncClient(async)
+                .dynamoDbAsyncClient(client)
                 .build()
                 .getDatabase(organisationId);
         database.start(future);
@@ -91,9 +119,10 @@ public final class DynamoDBInitializer {
         return database;
     }
 
-    public static Database getInMemoryDatabase(
+    static Database getInMemoryDatabase(
             final String organisationId,
-            final ConcurrentHashMap<DatabaseKey, DynamoItem> map, final CompletableFuture<Object> future
+            final ConcurrentHashMap<DatabaseKey, DynamoItem> map,
+            final CompletableFuture<Object> future
     ) {
         final var objectMapper = new ObjectMapper()
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
