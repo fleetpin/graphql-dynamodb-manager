@@ -12,8 +12,8 @@
 
 package com.fleetpin.graphql.dynamodb.manager.test;
 
-import com.fleetpin.graphql.dynamodb.manager.Database;
 import com.fleetpin.graphql.dynamodb.manager.Table;
+import com.fleetpin.graphql.dynamodb.manager.dynamo.Database;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.Comparator;

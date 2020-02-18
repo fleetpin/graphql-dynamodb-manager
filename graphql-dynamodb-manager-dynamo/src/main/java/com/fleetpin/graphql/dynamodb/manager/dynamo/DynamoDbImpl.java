@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.dynamo;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -22,15 +22,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import com.fleetpin.graphql.dynamodb.manager.*;
 import org.dataloader.DataLoader;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import graphql.VisibleForTesting;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
+
+import static com.fleetpin.graphql.dynamodb.manager.DynamoDbUtil.table;
 
 public final class DynamoDbImpl implements DynamoDb {
 	private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
@@ -41,7 +43,7 @@ public final class DynamoDbImpl implements DynamoDb {
 	private final ObjectMapper mapper;
 	private final Supplier<String> idGenerator;
 
-	DynamoDbImpl(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
+	public DynamoDbImpl(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
 		this.mapper = mapper;
 		this.entityTables = entityTables;
 		this.entityTable = entityTables.get(entityTables.size() - 1);
@@ -428,41 +430,26 @@ public final class DynamoDbImpl implements DynamoDb {
 		String source = table(entity.getClass());
 
 		CompletableFuture<?> future = CompletableFuture.completedFuture(null);
-		
-		
-		
+
+
+
 		for(var link: entity.getLinks().entries()) {
 			var targetIdAttribute = AttributeValue.builder().s(link.getKey() + ":" + link.getValue()).build();
 			Map<String, AttributeValue> targetKey = new HashMap<>();
 			targetKey.put("organisationId", organisationIdAttribute);
 			targetKey.put("id", targetIdAttribute);
-			
+
 			Map<String, AttributeValue> v = new HashMap<>();
 			v.put(":val", AttributeValue.builder().ss(entity.getId()).build());
-			
+
 			Map<String, String> k = new HashMap<>();
 			k.put("#table", source);
-			
+
 			var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val").expressionAttributeNames(k).expressionAttributeValues(v));
 			future = future.thenCombine(destination, (a,b) -> b);
 		}
 		entity.getLinks().clear();
 		return future.thenApply(__ -> entity);
-	}
-	
-	@VisibleForTesting
-	public static String table(Class<? extends Table> type) {
-		Class<?> tmp = type;
-		TableName name = null;
-		while(name == null && tmp != null) {
-			name = tmp.getDeclaredAnnotation(TableName.class);
-			tmp = tmp.getSuperclass();
-		}
-		if(name == null) {
-			return type.getSimpleName().toLowerCase() + "s";
-		} else {
-			return name.value();
-		}
 	}
 
 	@Override

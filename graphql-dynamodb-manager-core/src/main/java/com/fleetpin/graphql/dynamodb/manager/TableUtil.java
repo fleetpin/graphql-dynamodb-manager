@@ -46,7 +46,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class TableUtil {
 
-	static String getSecondaryGlobal(Table entity) {
+	public static String getSecondaryGlobal(Table entity) {
 		for(var method: entity.getClass().getMethods()) {
 			if(method.isAnnotationPresent(GlobalIndex.class)) {
 				try {
@@ -63,7 +63,7 @@ public class TableUtil {
 		return null;
 	}
 
-	static String getSecondaryOrganisation(Table entity) {
+	public static String getSecondaryOrganisation(Table entity) {
 		for(var method: entity.getClass().getMethods()) {
 			if(method.isAnnotationPresent(SecondaryIndex.class)) {
 				try {
@@ -80,7 +80,7 @@ public class TableUtil {
 		return null;
 	}
 
-	static AttributeValue toAttributes(ObjectMapper mapper, Object entity) {
+	public static AttributeValue toAttributes(ObjectMapper mapper, Object entity) {
 		Map<String, AttributeValue> entries = new HashMap<>();
 		ObjectNode tree = mapper.valueToTree(entity);
 
@@ -147,7 +147,7 @@ public class TableUtil {
 		return StreamSupport.stream(Spliterators.spliteratorUnknownSize(array.iterator(), 0), false);
 	}
 
-	static <T> T convertTo(ObjectMapper mapper, AttributeValue attributeValue, Class<T> type) {
+	public static <T> T convertTo(ObjectMapper mapper, AttributeValue attributeValue, Class<T> type) {
 		if(attributeValue == null) {
 			return null;
 		}
@@ -158,7 +158,7 @@ public class TableUtil {
 		}
 	}
 
-	static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
+	public static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
 		try {
 			ObjectNode objNode = mapper.createObjectNode();
 			item.forEach((key, v) -> {
@@ -235,7 +235,7 @@ public class TableUtil {
 		throw new RuntimeException("Unsupported type " + value);
 	}
 
-	static <T> CompletableFuture<List<T>> all(List<CompletableFuture<T>> collect) {
+	public static <T> CompletableFuture<List<T>> all(List<CompletableFuture<T>> collect) {
 		return CompletableFuture.allOf(collect.toArray(CompletableFuture[]::new))
 				.thenApply(__ -> collect.stream().map(m -> {
 					try {

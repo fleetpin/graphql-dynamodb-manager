@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.memory;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
@@ -21,7 +21,9 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.builder.annotations.Id;
+import com.fleetpin.graphql.dynamodb.manager.*;
 import com.google.common.collect.HashMultimap;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -103,7 +105,7 @@ final class InMemoryDynamoDbTest {
 
         final var items = inMemoryDynamoDb.get(List.of(databaseKey)).get();
 
-        assertNull(items.get(0));
+        Assertions.assertNull(items.get(0));
     }
 
     @Test
@@ -193,21 +195,7 @@ final class InMemoryDynamoDbTest {
         assertTrue(item.get(0).getLinks().isEmpty());
     }
 
-    static final class IdExposingTable extends Table {
-        private final String id;
-
-        public IdExposingTable(final String id) {
-            this.id = id;
-        }
-
-        @Id
-        @Override
-        public String getId() {
-            return id;
-        }
-    }
-
-    static final class GlobalLookupTable extends Table {
+    public static final class GlobalLookupTable extends Table {
         private String name;
         private String globalLookup;
 
@@ -224,6 +212,20 @@ final class InMemoryDynamoDbTest {
         @GlobalIndex
         public String getGlobalLookup() {
             return globalLookup;
+        }
+    }
+
+    static final class IdExposingTable extends Table {
+        private final String id;
+
+        public IdExposingTable(final String id) {
+            this.id = id;
+        }
+
+        @Id
+        @Override
+        public String getId() {
+            return id;
         }
     }
 

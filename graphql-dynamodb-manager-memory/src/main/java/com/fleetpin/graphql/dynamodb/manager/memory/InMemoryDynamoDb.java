@@ -10,9 +10,10 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.dynamodb.manager.*;
 import org.dataloader.DataLoader;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -27,7 +28,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.fleetpin.graphql.dynamodb.manager.DynamoDbImpl.table;
+import static com.fleetpin.graphql.dynamodb.manager.DynamoDbUtil.table;
 
 public final class InMemoryDynamoDb implements DynamoDb {
     private static final String SECONDARY_GLOBAL = "secondaryGlobal";

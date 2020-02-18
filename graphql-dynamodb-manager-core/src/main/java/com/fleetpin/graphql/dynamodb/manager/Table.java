@@ -40,10 +40,10 @@ public abstract class Table {
 		this.id = id;
 	}
 	
-	void setCreatedAt(Instant createdAt) {
+	public void setCreatedAt(Instant createdAt) {
 		this.createdAt = createdAt;
 	}
-	void setUpdatedAt(Instant updatedAt) {
+	public void setUpdatedAt(Instant updatedAt) {
 		this.updatedAt = updatedAt;
 	}
 	public final Instant getCreatedAt() {
@@ -73,10 +73,10 @@ public abstract class Table {
 
 	@JsonIgnore
 	@GraphQLIgnore
-	String getSourceTable() {
+	public String getSourceTable() {
 		return sourceTable;
 	}
-	void setSource(String sourceTable, HashMultimap<String, String> links, String sourceOrganisationId) {
+	public void setSource(String sourceTable, HashMultimap<String, String> links, String sourceOrganisationId) {
 		//so bad data does not cause error
 		if(createdAt == null) {
 			createdAt = Instant.MIN;
@@ -91,18 +91,18 @@ public abstract class Table {
 	
 	@JsonIgnore
 	@GraphQLIgnore
-	String getSourceOrganistaionId() {
+    public String getSourceOrganistaionId() {
 		return sourceOrganistaionId;
 	}
 
-	void setLinks(String type, Collection<String> groupIds) {
+	public void setLinks(String type, Collection<String> groupIds) {
 		this.links.removeAll(type);
 		this.links.putAll(type, groupIds);
 	}
 	
 	@JsonIgnore
 	@GraphQLIgnore
-	HashMultimap<String, String> getLinks() {
+	public HashMultimap<String, String> getLinks() {
 		return links;
 	}
 

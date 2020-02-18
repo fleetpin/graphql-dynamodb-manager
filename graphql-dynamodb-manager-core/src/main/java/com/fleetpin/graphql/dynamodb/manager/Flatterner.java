@@ -25,7 +25,7 @@ public class Flatterner {
 	private final Map<String, DynamoItem> lookup;
 	
 	
-	Flatterner() {
+	public Flatterner() {
 		lookup = new HashMap<>();
 	}
 	

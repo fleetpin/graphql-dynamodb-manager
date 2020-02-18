@@ -20,7 +20,7 @@ public class DatabaseKey {
 	private final Class<? extends Table> type;
 	private final String id;
 
-	DatabaseKey(String organisationId, Class<? extends Table> type, String id) {
+	public DatabaseKey(String organisationId, Class<? extends Table> type, String id) {
 		this.organisationId = organisationId;
 		this.type = type;
 		this.id = id;

@@ -23,6 +23,9 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.dynamodb.manager.*;
+import com.fleetpin.graphql.dynamodb.manager.dynamo.Database;
+import com.fleetpin.graphql.dynamodb.manager.dynamo.DynamoDbManager;
+import com.fleetpin.graphql.dynamodb.manager.memory.InMemoryDynamoDb;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 

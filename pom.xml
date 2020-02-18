@@ -13,6 +13,8 @@
     <modules>
         <module>graphql-dynamodb-manager-core</module>
         <module>graphql-dynamodb-manager-test</module>
+        <module>graphql-dynamodb-manager-memory</module>
+        <module>graphql-dynamodb-manager-dynamo</module>
     </modules>
 
     <scm>

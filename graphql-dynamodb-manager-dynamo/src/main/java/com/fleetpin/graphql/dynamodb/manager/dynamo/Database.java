@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.dynamo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,6 +27,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.fleetpin.graphql.dynamodb.manager.*;
 import org.dataloader.DataLoader;
 import org.dataloader.DataLoaderOptions;
 
@@ -127,7 +128,7 @@ public class Database {
 		}
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("Delete not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("Delete not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
     		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
     		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
@@ -163,7 +164,7 @@ public class Database {
 	public <T extends Table> CompletableFuture<T> deleteLinks(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("Delete links not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("Delete links not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
 			return dynamo.deleteLinks(organisationId, entity).thenCompose(t -> put(entity));
 		});
@@ -172,7 +173,7 @@ public class Database {
 	public <T extends Table> CompletableFuture<T> put(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("put not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("put not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
     		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
     		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
@@ -182,7 +183,7 @@ public class Database {
 	public <T extends Table> CompletableFuture<T> putGlobal(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("put global not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("put global not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
     		items.clear(new DatabaseKey("global", entity.getClass(), entity.getId()));
     		queries.clear(new DatabaseQueryKey("global", entity.getClass()));
@@ -230,7 +231,7 @@ public class Database {
 	public <T extends Table> CompletableFuture<T> links(T entity, Class<? extends Table> class1, List<String> targetIds) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("Link not allowed for " + DynamoDbImpl.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("Link not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
     		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
     		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
@@ -275,7 +276,7 @@ public class Database {
 
 
 	public Set<String> getLinkIds(Table entity, Class<? extends Table> type) {
-		return Collections.unmodifiableSet(entity.getLinks().get(DynamoDbImpl.table(type)));
+		return Collections.unmodifiableSet(entity.getLinks().get(DynamoDbUtil.table(type)));
 	}
 	
 }

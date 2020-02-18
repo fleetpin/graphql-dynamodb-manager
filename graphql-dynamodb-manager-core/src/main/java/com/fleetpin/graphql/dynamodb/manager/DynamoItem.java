@@ -28,7 +28,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 
 	private final HashMultimap<String, String> links;
 
-	DynamoItem(String table, Map<String, AttributeValue> item) {
+	public DynamoItem(String table, Map<String, AttributeValue> item) {
 		this.table = table;
 		this.item = item;
 
@@ -69,7 +69,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 		return table;
 	}
 	
-	Map<String, AttributeValue> getItem() {
+	public Map<String, AttributeValue> getItem() {
 		return item;
 	}
 
