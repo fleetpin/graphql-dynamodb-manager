@@ -10,8 +10,9 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager.test;
+package com.fleetpin.graphql.dynamodb.manager.test.annotations;
 
+import com.fleetpin.graphql.dynamodb.manager.test.TestDatabaseProvider;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 

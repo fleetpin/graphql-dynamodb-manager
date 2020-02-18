@@ -12,14 +12,15 @@
 
 package com.fleetpin.graphql.dynamodb.manager.test;
 
-import com.fleetpin.graphql.dynamodb.manager.Table;
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
 import com.fleetpin.graphql.dynamodb.manager.dynamo.Database;
+import com.fleetpin.graphql.dynamodb.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 
-final class DynamoDBLinkTest {
+final class DynamoDbLinkTest {
 
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
 	void testSimpleQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
@@ -32,8 +33,6 @@ final class DynamoDBLinkTest {
 		dbProd.link(frank, bob.getClass(), bob.getId()).get();
 		db.link(garry, john.getClass(), john.getId()).get();
 
-		garry = db.get(SimpleTable.class, garry.getId()).get();
-		frank = db.get(SimpleTable.class, frank.getId()).get();
 		john = db.get(AnotherTable.class, john.getId()).get();
 		bob = db.get(AnotherTable.class, bob.getId()).get();
 
@@ -57,8 +56,6 @@ final class DynamoDBLinkTest {
 		db.link(garry, bob.getClass(), bob.getId()).get();
 		dbProd.link(frank, bob.getClass(), bob.getId()).get();
 
-		garry = db.get(SimpleTable.class, garry.getId()).get();
-		frank = db.get(SimpleTable.class, frank.getId()).get();
 		bob = db.get(AnotherTable.class, bob.getId()).get();
 
 		var bobLinks = db.getLinks(bob, SimpleTable.class).get();

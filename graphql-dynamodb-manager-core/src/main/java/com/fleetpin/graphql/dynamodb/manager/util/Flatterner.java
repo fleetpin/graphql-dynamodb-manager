@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.util;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,9 +18,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fleetpin.graphql.dynamodb.manager.DynamoItem;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-public class Flatterner {
+public final class Flatterner {
 
 	private final Map<String, DynamoItem> lookup;
 	

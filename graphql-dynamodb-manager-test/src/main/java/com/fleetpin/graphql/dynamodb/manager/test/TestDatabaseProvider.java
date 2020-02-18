@@ -15,6 +15,7 @@ package com.fleetpin.graphql.dynamodb.manager.test;
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 import com.fleetpin.graphql.dynamodb.manager.DatabaseKey;
 import com.fleetpin.graphql.dynamodb.manager.DynamoItem;
+import com.fleetpin.graphql.dynamodb.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
@@ -24,7 +25,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-final class TestDatabaseProvider implements ArgumentsProvider {
+import static com.fleetpin.graphql.dynamodb.manager.test.DynamoDbInitializer.*;
+
+public final class TestDatabaseProvider implements ArgumentsProvider {
     private DynamoDBProxyServer server;
     private CompletableFuture<Object> finished;
 
@@ -32,14 +35,14 @@ final class TestDatabaseProvider implements ArgumentsProvider {
     public Stream<Arguments> provideArguments(final ExtensionContext extensionContext) throws Exception {
         closePreviousRun();
 
-        final String port = DynamoDBInitializer.findFreePort();
+        final String port = findFreePort();
 
-        server = DynamoDBInitializer.startDynamoServer(port);
-        final var client = DynamoDBInitializer.startDynamoClient(port);
+        server = startDynamoServer(port);
+        final var client = startDynamoClient(port);
 
         System.setProperty("sqlite4java.library.path", "native-libs");
-        DynamoDBInitializer.createTable(client, "prod");
-        DynamoDBInitializer.createTable(client, "stage");
+        createTable(client, "prod");
+        createTable(client, "stage");
 
         finished = new CompletableFuture<>();
 
@@ -49,8 +52,8 @@ final class TestDatabaseProvider implements ArgumentsProvider {
 
         if (testMethod.getParameterCount() == 1) {
             return Stream.of(
-                    Arguments.of(DynamoDBInitializer.getInMemoryDatabase(organisationIds[0], new ConcurrentHashMap<>(), finished)),
-                    Arguments.of(DynamoDBInitializer.getEmbeddedDatabase(organisationIds[0], client, finished))
+                    Arguments.of(getInMemoryDatabase(organisationIds[0], new ConcurrentHashMap<>(), finished)),
+                    Arguments.of(getEmbeddedDatabase(organisationIds[0], client, finished))
             );
         } else {
             if (organisationIds.length < 2) {
@@ -73,20 +76,20 @@ final class TestDatabaseProvider implements ArgumentsProvider {
         if (testDatabase.useProd()) {
             params.add(
                     Arguments.of(
-                            DynamoDBInitializer.getEmbeddedDatabase(organisationIds[0], async, finished),
-                            DynamoDBInitializer.getProductionDatabase(organisationIds[1], async, finished)
+                            getEmbeddedDatabase(organisationIds[0], async, finished),
+                            getProductionDatabase(organisationIds[1], async, finished)
                     )
             );
         } else {
             params.add(
                     Arguments.of(
-                            DynamoDBInitializer.getInMemoryDatabase(organisationIds[0], map, finished),
-                            DynamoDBInitializer.getInMemoryDatabase(organisationIds[1], map, finished)
+                            getInMemoryDatabase(organisationIds[0], map, finished),
+                            getInMemoryDatabase(organisationIds[1], map, finished)
                     )
             ).add(
                     Arguments.of(
-                            DynamoDBInitializer.getEmbeddedDatabase(organisationIds[0], async, finished),
-                            DynamoDBInitializer.getEmbeddedDatabase(organisationIds[1], async, finished)
+                            getEmbeddedDatabase(organisationIds[0], async, finished),
+                            getEmbeddedDatabase(organisationIds[1], async, finished)
                     )
             );
         }

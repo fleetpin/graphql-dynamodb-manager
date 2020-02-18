@@ -12,6 +12,8 @@
 
 package com.fleetpin.graphql.dynamodb.manager;
 
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
+
 import java.util.Objects;
 
 public class DatabaseKey {

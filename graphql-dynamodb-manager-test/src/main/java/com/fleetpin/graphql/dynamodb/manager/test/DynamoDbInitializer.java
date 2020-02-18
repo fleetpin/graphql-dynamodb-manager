@@ -22,7 +22,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
-import com.fleetpin.graphql.dynamodb.manager.*;
+import com.fleetpin.graphql.dynamodb.manager.DatabaseKey;
+import com.fleetpin.graphql.dynamodb.manager.DynamoItem;
 import com.fleetpin.graphql.dynamodb.manager.dynamo.Database;
 import com.fleetpin.graphql.dynamodb.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.dynamodb.manager.memory.InMemoryDynamoDb;
@@ -39,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 
-final class DynamoDBInitializer {
+final class DynamoDbInitializer {
     @SuppressWarnings("unchecked")
     static void createTable(final DynamoDbAsyncClient client, final String name) throws ExecutionException, InterruptedException {
         client.createTable(t -> t.tableName(name).keySchema(

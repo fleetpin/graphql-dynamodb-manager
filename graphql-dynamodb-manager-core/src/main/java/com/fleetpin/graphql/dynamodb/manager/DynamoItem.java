@@ -15,6 +15,8 @@ package com.fleetpin.graphql.dynamodb.manager;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
+import com.fleetpin.graphql.dynamodb.manager.table.TableUtil;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 

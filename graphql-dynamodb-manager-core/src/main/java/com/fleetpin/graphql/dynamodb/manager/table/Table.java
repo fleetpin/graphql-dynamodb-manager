@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.table;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -20,7 +20,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fleetpin.graphql.builder.annotations.GraphQLIgnore;
 import com.fleetpin.graphql.builder.annotations.Id;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Multimap;
 
 public abstract class Table {
 

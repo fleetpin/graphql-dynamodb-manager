@@ -10,11 +10,16 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.table;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
-public interface ModificationPermission extends Function<Table, CompletableFuture<Boolean>>{
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 
+@Retention(RUNTIME)
+@Target(ElementType.TYPE)
+public @interface TableName {
+	public String value();
 }

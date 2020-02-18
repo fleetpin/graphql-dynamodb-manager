@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.table;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -39,6 +39,8 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 
+import com.fleetpin.graphql.dynamodb.manager.annotations.GlobalIndex;
+import com.fleetpin.graphql.dynamodb.manager.annotations.SecondaryIndex;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructList;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructMap;

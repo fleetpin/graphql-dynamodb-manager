@@ -13,7 +13,12 @@
 package com.fleetpin.graphql.dynamodb.manager.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.dynamodb.manager.*;
+import com.fleetpin.graphql.dynamodb.manager.DatabaseKey;
+import com.fleetpin.graphql.dynamodb.manager.DatabaseQueryKey;
+import com.fleetpin.graphql.dynamodb.manager.DynamoDb;
+import com.fleetpin.graphql.dynamodb.manager.DynamoItem;
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
+import com.fleetpin.graphql.dynamodb.manager.table.TableUtil;
 import org.dataloader.DataLoader;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -28,7 +33,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.fleetpin.graphql.dynamodb.manager.DynamoDbUtil.table;
+import static com.fleetpin.graphql.dynamodb.manager.util.DynamoDbUtil.table;
 
 public final class InMemoryDynamoDb implements DynamoDb {
     private static final String SECONDARY_GLOBAL = "secondaryGlobal";

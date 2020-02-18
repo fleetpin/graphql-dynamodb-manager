@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.annotations;
 
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 

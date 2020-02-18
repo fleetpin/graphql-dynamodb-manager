@@ -10,10 +10,13 @@
  * the License.
  */
 
-package com.fleetpin.graphql.dynamodb.manager;
+package com.fleetpin.graphql.dynamodb.manager.access;
 
-public class ForbiddenWriteException extends RuntimeException {
-	public ForbiddenWriteException(String msg) {
-		super(msg);
-	}
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+
+public interface ModificationPermission extends Function<Table, CompletableFuture<Boolean>>{
+
 }

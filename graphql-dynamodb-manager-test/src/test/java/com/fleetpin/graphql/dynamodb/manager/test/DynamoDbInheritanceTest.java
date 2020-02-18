@@ -15,15 +15,16 @@ package com.fleetpin.graphql.dynamodb.manager.test;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fleetpin.graphql.dynamodb.manager.Table;
-import com.fleetpin.graphql.dynamodb.manager.TableName;
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
+import com.fleetpin.graphql.dynamodb.manager.table.TableName;
 import com.fleetpin.graphql.dynamodb.manager.dynamo.Database;
+import com.fleetpin.graphql.dynamodb.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 
-final class DynamoDBInheritanceTest {
+final class DynamoDbInheritanceTest {
 
 	@TestDatabase
 	void testSimplePutGetDelete(final Database db) throws InterruptedException, ExecutionException {

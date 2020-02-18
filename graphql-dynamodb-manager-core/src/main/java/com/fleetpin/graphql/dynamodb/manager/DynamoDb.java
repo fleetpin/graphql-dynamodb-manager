@@ -12,6 +12,7 @@
 
 package com.fleetpin.graphql.dynamodb.manager;
 
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
 import org.dataloader.DataLoader;
 
 import java.util.List;

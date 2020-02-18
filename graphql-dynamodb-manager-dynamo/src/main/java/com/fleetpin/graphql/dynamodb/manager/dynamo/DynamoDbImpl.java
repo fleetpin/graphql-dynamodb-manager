@@ -22,7 +22,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import com.fleetpin.graphql.dynamodb.manager.*;
+import com.fleetpin.graphql.dynamodb.manager.DatabaseKey;
+import com.fleetpin.graphql.dynamodb.manager.DatabaseQueryKey;
+import com.fleetpin.graphql.dynamodb.manager.DynamoDb;
+import com.fleetpin.graphql.dynamodb.manager.DynamoItem;
+import com.fleetpin.graphql.dynamodb.manager.table.Table;
+import com.fleetpin.graphql.dynamodb.manager.table.TableUtil;
+import com.fleetpin.graphql.dynamodb.manager.util.Flatterner;
 import org.dataloader.DataLoader;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,7 +38,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
 
-import static com.fleetpin.graphql.dynamodb.manager.DynamoDbUtil.table;
+import static com.fleetpin.graphql.dynamodb.manager.util.DynamoDbUtil.table;
 
 public final class DynamoDbImpl implements DynamoDb {
 	private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
