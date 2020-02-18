@@ -3,7 +3,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.fleetpin</groupId>
-    <artifactId>graphql-dynamodb-manager</artifactId>
+    <artifactId>graphql-database-manager</artifactId>
     <version>0.1.3</version>
     <name>GraphQL Builder</name>
     <description>library to make working with dynamodb and graphql easy</description>
@@ -11,10 +11,10 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>graphql-dynamodb-manager-core</module>
-        <module>graphql-dynamodb-manager-test</module>
-        <module>graphql-dynamodb-manager-memory</module>
-        <module>graphql-dynamodb-manager-dynamo</module>
+        <module>graphql-database-manager-core</module>
+        <module>graphql-database-manager-test</module>
+        <module>graphql-database-manager-memory</module>
+        <module>graphql-database-manager-dynamo</module>
     </modules>
 
     <scm>
