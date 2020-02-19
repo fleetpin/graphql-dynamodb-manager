@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager.table;
+package com.fleetpin.graphql.database.manager;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -39,10 +39,10 @@ public abstract class Table {
 		this.id = id;
 	}
 	
-	public void setCreatedAt(Instant createdAt) {
+	void setCreatedAt(Instant createdAt) {
 		this.createdAt = createdAt;
 	}
-	public void setUpdatedAt(Instant updatedAt) {
+	void setUpdatedAt(Instant updatedAt) {
 		this.updatedAt = updatedAt;
 	}
 	public final Instant getCreatedAt() {
@@ -72,10 +72,10 @@ public abstract class Table {
 
 	@JsonIgnore
 	@GraphQLIgnore
-	public String getSourceTable() {
+	String getSourceTable() {
 		return sourceTable;
 	}
-	public void setSource(String sourceTable, HashMultimap<String, String> links, String sourceOrganisationId) {
+	void setSource(String sourceTable, HashMultimap<String, String> links, String sourceOrganisationId) {
 		//so bad data does not cause error
 		if(createdAt == null) {
 			createdAt = Instant.MIN;
@@ -90,18 +90,18 @@ public abstract class Table {
 	
 	@JsonIgnore
 	@GraphQLIgnore
-    public String getSourceOrganistaionId() {
+	String getSourceOrganistaionId() {
 		return sourceOrganistaionId;
 	}
 
-	public void setLinks(String type, Collection<String> groupIds) {
+	void setLinks(String type, Collection<String> groupIds) {
 		this.links.removeAll(type);
 		this.links.putAll(type, groupIds);
 	}
 	
 	@JsonIgnore
 	@GraphQLIgnore
-	public HashMultimap<String, String> getLinks() {
+	HashMultimap<String, String> getLinks() {
 		return links;
 	}
 

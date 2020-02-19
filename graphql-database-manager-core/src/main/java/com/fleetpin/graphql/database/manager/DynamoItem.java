@@ -15,8 +15,6 @@ package com.fleetpin.graphql.database.manager;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.table.Table;
-import com.fleetpin.graphql.database.manager.table.TableUtil;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 
@@ -30,7 +28,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 
 	private final HashMultimap<String, String> links;
 
-	public DynamoItem(String table, Map<String, AttributeValue> item) {
+	DynamoItem(String table, Map<String, AttributeValue> item) {
 		this.table = table;
 		this.item = item;
 
@@ -71,7 +69,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 		return table;
 	}
 	
-	public Map<String, AttributeValue> getItem() {
+	Map<String, AttributeValue> getItem() {
 		return item;
 	}
 

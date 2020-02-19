@@ -21,12 +21,11 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.builder.annotations.Id;
+import com.fleetpin.graphql.database.manager.AbstractTestDynamoDb;
+import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
+import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
-import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
-import com.fleetpin.graphql.database.manager.memory.InMemoryDynamoDb;
-import com.fleetpin.graphql.database.manager.table.Table;
 import com.google.common.collect.HashMultimap;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * In the case that you are looking for testing around more DynamoDb behaviour,
  * look in graphql-database-manager-test tests.
  */
-final class InMemoryDynamoDbTest {
+final class InMemoryDynamoDbTest extends AbstractTestDynamoDb {
     private InMemoryDynamoDb inMemoryDynamoDb;
 
     @BeforeEach
@@ -60,7 +59,7 @@ final class InMemoryDynamoDbTest {
     void shouldBeAbleToPutWithNullIdAndGenerateUsingGenerator() throws ExecutionException, InterruptedException {
         inMemoryDynamoDb.put("organisation-0", new NameTable("name")).get();
 
-        final var databaseKeys = new DatabaseKey("organisation-0", NameTable.class, "generated-id");
+        final var databaseKeys = createDatabaseKey("organisation-0", NameTable.class, "generated-id");
         final var items = inMemoryDynamoDb.get(List.of(databaseKeys)).get();
 
         assertEquals("generated-id", items.get(0).getId());
@@ -69,7 +68,7 @@ final class InMemoryDynamoDbTest {
     @Test
     void shouldBeAbleToGetOnlyEntryWithMatchingDatabaseKey() throws ExecutionException, InterruptedException {
         inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-0")).get();
-        final var databaseKey = new DatabaseKey("organisation-0", IdExposingTable.class, "id-0");
+        final var databaseKey = createDatabaseKey("organisation-0", IdExposingTable.class, "id-0");
 
         final var items = inMemoryDynamoDb.get(List.of(databaseKey)).get();
 
@@ -81,7 +80,7 @@ final class InMemoryDynamoDbTest {
         inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-0")).get();
         inMemoryDynamoDb.put("organisation-1", new IdExposingTable("id-1")).get();
         inMemoryDynamoDb.put("organisation-2", new IdExposingTable("id-2")).get();
-        final var databaseKey = new DatabaseKey("organisation-0", IdExposingTable.class, "id-0");
+        final var databaseKey = createDatabaseKey("organisation-0", IdExposingTable.class, "id-0");
 
         final var items = inMemoryDynamoDb.get(List.of(databaseKey)).get();
 
@@ -92,7 +91,7 @@ final class InMemoryDynamoDbTest {
     @Test
     void shouldBeAbleToFetchOnlyItemWhenGlobalRegardlessOfGivenKey() throws ExecutionException, InterruptedException {
         inMemoryDynamoDb.put("global", new IdExposingTable("id-0")).get();
-        final var databaseKey = new DatabaseKey("dontcare-0", IdExposingTable.class, "id-0");
+        final var databaseKey = createDatabaseKey("dontcare-0", IdExposingTable.class, "id-0");
 
         final var items = inMemoryDynamoDb.get(List.of(databaseKey)).get();
 
@@ -102,11 +101,11 @@ final class InMemoryDynamoDbTest {
     @Test
     void shouldBeAbleToDeleteItemWithMatchingOrganisationIdAndId() throws ExecutionException, InterruptedException {
         final var table = new IdExposingTable("id-0");
-        table.setSource("table-0", HashMultimap.create(), "organisation-0");
+        setSource(table, "table-0", HashMultimap.create(), "organisation-0");
 
         inMemoryDynamoDb.put("organisation-0", table).get();
         inMemoryDynamoDb.delete("organisation-0", table).get();
-        final var databaseKey = new DatabaseKey("organisation-0", IdExposingTable.class, "id-0");
+        final var databaseKey = createDatabaseKey("organisation-0", IdExposingTable.class, "id-0");
 
         final var items = inMemoryDynamoDb.get(List.of(databaseKey)).get();
 
@@ -117,7 +116,7 @@ final class InMemoryDynamoDbTest {
     void shouldBeAbleToFindItemUsingQueryMethod() throws ExecutionException, InterruptedException {
         inMemoryDynamoDb.put("organisation-0", new IdExposingTable("id-0")).get();
 
-        final var databaseQueryKey = new DatabaseQueryKey("organisation-0", IdExposingTable.class);
+        final var databaseQueryKey = createDatabaseQueryKey("organisation-0", IdExposingTable.class);
         final var items = inMemoryDynamoDb.query(databaseQueryKey).get();
 
         assertFalse(items.isEmpty());
@@ -128,7 +127,7 @@ final class InMemoryDynamoDbTest {
     void shouldBeAbleToFindItemUsingQueryMethodAndGlobalOrganisationId() throws ExecutionException, InterruptedException {
         inMemoryDynamoDb.put("global", new IdExposingTable("id-0")).get();
 
-        final var databaseQueryKey = new DatabaseQueryKey("fooey", IdExposingTable.class);
+        final var databaseQueryKey = createDatabaseQueryKey("fooey", IdExposingTable.class);
         final var items = inMemoryDynamoDb.query(databaseQueryKey).get();
 
         assertFalse(items.isEmpty());
@@ -162,13 +161,13 @@ final class InMemoryDynamoDbTest {
 
         final var targetItem = inMemoryDynamoDb.link("organisation-0", new IdExposingTable("id-0"), IdExposingTable.class, List.of("id-1")).get();
 
-        final var item = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
-        assertEquals(item.get(0).getLinks(), targetItem.getLinks());
+        final var item = inMemoryDynamoDb.get(List.of(createDatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
+        assertEquals(item.get(0).getLinks(), getLinks(targetItem));
 
-        assertFalse(targetItem.getLinks().get("idexposingtables").isEmpty());
-        assertEquals("id-1", targetItem.getLinks().get("idexposingtables").toArray()[0]);
+        assertFalse(getLinks(targetItem).get("idexposingtables").isEmpty());
+        assertEquals("id-1", getLinks(targetItem).get("idexposingtables").toArray()[0]);
 
-        final var linkedItem = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-1"))).get();
+        final var linkedItem = inMemoryDynamoDb.get(List.of(createDatabaseKey("organisation-0", IdExposingTable.class, "id-1"))).get();
         assertFalse(linkedItem.get(0).getLinks().get("idexposingtables").isEmpty());
         assertEquals("id-0", linkedItem.get(0).getLinks().get("idexposingtables").toArray()[0]);
     }
@@ -181,11 +180,11 @@ final class InMemoryDynamoDbTest {
 
         final var clearedEntity = inMemoryDynamoDb.deleteLinks("organisation-0", new IdExposingTable("id-0")).get();
 
-        final var item = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
-        assertTrue(clearedEntity.getLinks().isEmpty());
+        final var item = inMemoryDynamoDb.get(List.of(createDatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
+        assertTrue(getLinks(clearedEntity).isEmpty());
         assertTrue(item.get(0).getLinks().isEmpty());
 
-        final var linkedItem = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-1"))).get();
+        final var linkedItem = inMemoryDynamoDb.get(List.of(createDatabaseKey("organisation-0", IdExposingTable.class, "id-1"))).get();
         assertTrue(linkedItem.get(0).getLinks().isEmpty());
     }
 
@@ -196,7 +195,7 @@ final class InMemoryDynamoDbTest {
 
         inMemoryDynamoDb.deleteLinks("organisation-0", new IdExposingTable("id-0")).get();
 
-        final var item = inMemoryDynamoDb.get(List.of(new DatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
+        final var item = inMemoryDynamoDb.get(List.of(createDatabaseKey("organisation-0", IdExposingTable.class, "id-0"))).get();
         assertTrue(item.get(0).getLinks().isEmpty());
     }
 

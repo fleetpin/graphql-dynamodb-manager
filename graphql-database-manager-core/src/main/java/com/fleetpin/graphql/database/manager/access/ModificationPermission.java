@@ -12,7 +12,7 @@
 
 package com.fleetpin.graphql.database.manager.access;
 
-import com.fleetpin.graphql.database.manager.table.Table;
+import com.fleetpin.graphql.database.manager.Table;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;

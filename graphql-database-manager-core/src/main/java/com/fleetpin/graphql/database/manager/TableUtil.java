@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager.table;
+package com.fleetpin.graphql.database.manager;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -48,7 +48,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class TableUtil {
 
-	public static String getSecondaryGlobal(Table entity) {
+	static String getSecondaryGlobal(Table entity) {
 		for(var method: entity.getClass().getMethods()) {
 			if(method.isAnnotationPresent(GlobalIndex.class)) {
 				try {
@@ -65,7 +65,7 @@ public class TableUtil {
 		return null;
 	}
 
-	public static String getSecondaryOrganisation(Table entity) {
+	static String getSecondaryOrganisation(Table entity) {
 		for(var method: entity.getClass().getMethods()) {
 			if(method.isAnnotationPresent(SecondaryIndex.class)) {
 				try {
@@ -82,7 +82,7 @@ public class TableUtil {
 		return null;
 	}
 
-	public static AttributeValue toAttributes(ObjectMapper mapper, Object entity) {
+	static AttributeValue toAttributes(ObjectMapper mapper, Object entity) {
 		Map<String, AttributeValue> entries = new HashMap<>();
 		ObjectNode tree = mapper.valueToTree(entity);
 
@@ -149,7 +149,7 @@ public class TableUtil {
 		return StreamSupport.stream(Spliterators.spliteratorUnknownSize(array.iterator(), 0), false);
 	}
 
-	public static <T> T convertTo(ObjectMapper mapper, AttributeValue attributeValue, Class<T> type) {
+	static <T> T convertTo(ObjectMapper mapper, AttributeValue attributeValue, Class<T> type) {
 		if(attributeValue == null) {
 			return null;
 		}
@@ -160,7 +160,7 @@ public class TableUtil {
 		}
 	}
 
-	public static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
+	static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
 		try {
 			ObjectNode objNode = mapper.createObjectNode();
 			item.forEach((key, v) -> {
@@ -237,7 +237,7 @@ public class TableUtil {
 		throw new RuntimeException("Unsupported type " + value);
 	}
 
-	public static <T> CompletableFuture<List<T>> all(List<CompletableFuture<T>> collect) {
+	static <T> CompletableFuture<List<T>> all(List<CompletableFuture<T>> collect) {
 		return CompletableFuture.allOf(collect.toArray(CompletableFuture[]::new))
 				.thenApply(__ -> collect.stream().map(m -> {
 					try {

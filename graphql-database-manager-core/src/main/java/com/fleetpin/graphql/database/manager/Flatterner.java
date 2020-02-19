@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager.util;
+package com.fleetpin.graphql.database.manager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,7 +26,7 @@ public final class Flatterner {
 	private final Map<String, DynamoItem> lookup;
 	
 	
-	public Flatterner() {
+	Flatterner() {
 		lookup = new HashMap<>();
 	}
 	

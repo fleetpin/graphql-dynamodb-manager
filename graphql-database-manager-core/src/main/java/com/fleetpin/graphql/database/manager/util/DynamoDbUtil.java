@@ -1,7 +1,7 @@
 package com.fleetpin.graphql.database.manager.util;
 
-import com.fleetpin.graphql.database.manager.table.Table;
-import com.fleetpin.graphql.database.manager.table.TableName;
+import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.annotations.TableName;
 
 public final class DynamoDbUtil {
     public static String table(Class<? extends Table> type) {

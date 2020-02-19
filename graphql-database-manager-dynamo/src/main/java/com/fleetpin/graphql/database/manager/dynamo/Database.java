@@ -12,13 +12,15 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
+import com.fleetpin.graphql.database.manager.access.ModificationPermission;
+import com.fleetpin.graphql.database.manager.util.DynamoDbUtil;
+import org.dataloader.DataLoader;
+import org.dataloader.DataLoaderOptions;
+
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -27,24 +29,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
-import com.fleetpin.graphql.database.manager.access.ModificationPermission;
-import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
-import com.fleetpin.graphql.database.manager.DynamoDb;
-import com.fleetpin.graphql.database.manager.DynamoItem;
-import com.fleetpin.graphql.database.manager.table.Table;
-import com.fleetpin.graphql.database.manager.table.TableUtil;
-import com.fleetpin.graphql.database.manager.util.DynamoDbUtil;
-import org.dataloader.DataLoader;
-import org.dataloader.DataLoaderOptions;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-public class Database {
+public class Database extends AbstractDatabase {
 
 	private String organisationId;
-	private final DynamoDb dynamo;
+	private final AbstractDynamoDb dynamo;
 
 	private final ObjectMapper mapper;
 	
@@ -53,7 +41,7 @@ public class Database {
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 	
-	Database(ObjectMapper mapper, String organisationId, DynamoDb dynamo, ModificationPermission putAllow) {
+	Database(ObjectMapper mapper, String organisationId, AbstractDynamoDb dynamo, ModificationPermission putAllow) {
 		this.mapper = mapper;
 		this.organisationId = organisationId;
 		this.dynamo = dynamo;
@@ -70,7 +58,7 @@ public class Database {
 
 
 	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type) {
-		return queries.load(new DatabaseQueryKey(organisationId, type))
+		return queries.load(createDatabaseQueryKey(organisationId, type))
 				.thenApply(items -> items.stream().map(item -> item.convertTo(mapper, type)).filter(Objects::nonNull).collect(Collectors.toList()));
 	}
 
@@ -109,7 +97,7 @@ public class Database {
 		if(id == null) {
 			return CompletableFuture.completedFuture(Optional.empty());
 		}
-		return items.load(new DatabaseKey(organisationId, type, id)).thenApply(item -> {
+		return items.load(createDatabaseKey(organisationId, type, id)).thenApply(item -> {
 			if(item == null) {
 				return Optional.empty();
 			}else {
@@ -119,7 +107,7 @@ public class Database {
 	}
 	
 	public <T extends Table> CompletableFuture<T> get(Class<T> type, String id) {
-		return items.load(new DatabaseKey(organisationId, type, id)).thenApply(item -> {
+		return items.load(createDatabaseKey(organisationId, type, id)).thenApply(item -> {
 			if(item == null) {
 				return null;
 			}else {
@@ -130,7 +118,7 @@ public class Database {
 
 	public <T extends Table> CompletableFuture<T> delete(T entity, boolean deleteLinks) {
 		if(!deleteLinks) {
-			if(!entity.getLinks().isEmpty()) {
+			if(!getLinks(entity).isEmpty()) {
 				throw new RuntimeException("deleting would leave dangling links");
 			}
 		}
@@ -138,8 +126,8 @@ public class Database {
 			if(!allow) {
 				throw new ForbiddenWriteException("Delete not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
+    		items.clear(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(createDatabaseQueryKey(organisationId, entity.getClass()));
     		
     		if(deleteLinks) {
     			return deleteLinks(entity).thenCompose(t -> dynamo.delete(organisationId, entity));
@@ -183,8 +171,8 @@ public class Database {
 			if(!allow) {
 				throw new ForbiddenWriteException("put not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
+    		items.clear(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(createDatabaseQueryKey(organisationId, entity.getClass()));
     		return dynamo.put(organisationId, entity);
 		});
 	}
@@ -193,8 +181,8 @@ public class Database {
 			if(!allow) {
 				throw new ForbiddenWriteException("put global not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(new DatabaseKey("global", entity.getClass(), entity.getId()));
-    		queries.clear(new DatabaseQueryKey("global", entity.getClass()));
+    		items.clear(createDatabaseKey("global", entity.getClass(), entity.getId()));
+    		queries.clear(createDatabaseQueryKey("global", entity.getClass()));
     		return dynamo.put("global", entity);
 		});
 		
@@ -241,12 +229,12 @@ public class Database {
 			if(!allow) {
 				throw new ForbiddenWriteException("Link not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(new DatabaseQueryKey(organisationId, entity.getClass()));
+    		items.clear(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(createDatabaseQueryKey(organisationId, entity.getClass()));
     		for(String id: targetIds) {
-    			items.clear(new DatabaseKey(organisationId, class1, id));
+    			items.clear(createDatabaseKey(organisationId, class1, id));
     		}
-    		queries.clear(new DatabaseQueryKey(organisationId, class1));
+    		queries.clear(createDatabaseQueryKey(organisationId, class1));
     		return dynamo.link(organisationId, entity, class1, targetIds);
 		});
 	}
@@ -265,7 +253,7 @@ public class Database {
 		if(ids == null) {
 			return CompletableFuture.completedFuture(Collections.emptyList());
 		}
-		return TableUtil.all(ids.stream().map(id -> get(class1, id)).collect(Collectors.toList()));
+		return all(ids.stream().map(id -> get(class1, id)).collect(Collectors.toList()));
 	}
 
 
@@ -275,7 +263,7 @@ public class Database {
 
 
 	public String getSourceOrganisationId(Table table) {
-		return table.getSourceOrganistaionId();
+		return getSourceOrganistaionId(table);
 	}
 
 	public String newId() {
@@ -284,7 +272,7 @@ public class Database {
 
 
 	public Set<String> getLinkIds(Table entity, Class<? extends Table> type) {
-		return Collections.unmodifiableSet(entity.getLinks().get(DynamoDbUtil.table(type)));
+		return Collections.unmodifiableSet(getLinks(entity).get(DynamoDbUtil.table(type)));
 	}
 	
 }

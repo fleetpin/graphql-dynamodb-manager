@@ -13,12 +13,7 @@
 package com.fleetpin.graphql.database.manager.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
-import com.fleetpin.graphql.database.manager.DynamoDb;
-import com.fleetpin.graphql.database.manager.DynamoItem;
-import com.fleetpin.graphql.database.manager.table.Table;
-import com.fleetpin.graphql.database.manager.table.TableUtil;
+import com.fleetpin.graphql.database.manager.*;
 import org.dataloader.DataLoader;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -35,7 +30,7 @@ import java.util.stream.Collectors;
 
 import static com.fleetpin.graphql.database.manager.util.DynamoDbUtil.table;
 
-public final class InMemoryDynamoDb implements DynamoDb {
+public final class InMemoryDynamoDb extends AbstractDynamoDb {
     private static final String SECONDARY_GLOBAL = "secondaryGlobal";
     private static final String SECONDARY_ORGANISATION = "secondaryOrganisation";
     private final ObjectMapper objectMapper;
@@ -55,11 +50,11 @@ public final class InMemoryDynamoDb implements DynamoDb {
     @Override
     public <T extends Table> CompletableFuture<T> delete(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
-            if (!organisationId.equals(entity.getSourceOrganistaionId())) {
+            if (!organisationId.equals(getSourceOrganistaionId(entity))) {
                 return entity;
             }
 
-            map.remove(new DatabaseKey(organisationId, entity.getClass(), entity.getId()));
+            map.remove(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
 
             return entity;
         });
@@ -68,13 +63,13 @@ public final class InMemoryDynamoDb implements DynamoDb {
     @Override
     public <T extends Table> CompletableFuture<T> deleteLinks(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
-            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
+            final var databaseKey = createDatabaseKey(organisationId, entity.getClass(), entity.getId());
             final var item = map.get(databaseKey);
 
             map.forEach((key, value) -> value.getLinks().get(table(entity.getClass())).clear());
             item.getLinks().clear();
 
-            entity.getLinks().clear();
+            getLinks(entity).clear();
             return entity;
         });
     }
@@ -83,13 +78,13 @@ public final class InMemoryDynamoDb implements DynamoDb {
     public <T extends Table> CompletableFuture<T> put(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
             entity.setId(Objects.requireNonNullElseGet(entity.getId(), () -> {
-                entity.setCreatedAt(Instant.now());
+                setCreatedAt(entity, Instant.now());
                 return newId();
             }));
 
-            entity.setUpdatedAt(Instant.now());
+            setUpdatedAt(entity, Instant.now());
 
-            final var links = AttributeValue.builder().m(entity.getLinks()
+            final var links = AttributeValue.builder().m(getLinks(entity)
                     .entries()
                     .stream()
                     .collect(Collectors.toMap(
@@ -101,12 +96,12 @@ public final class InMemoryDynamoDb implements DynamoDb {
             final var item = new HashMap<String, AttributeValue>();
             item.put("organisationId", AttributeValue.builder().s(organisationId).build());
             item.put("id", createTableNamedKey(entity.getClass(), entity.getId()));
-            item.put("item", TableUtil.toAttributes(objectMapper, entity));
+            item.put("item", toAttributes(objectMapper, entity));
             item.put("links", links);
             appendSecondaryItemFields(entity, item);
 
-            final var databaseKey = new DatabaseKey(organisationId, entity.getClass(), entity.getId());
-            final var dynamoItem = new DynamoItem(entity.getSourceTable(), item);
+            final var databaseKey = createDatabaseKey(organisationId, entity.getClass(), entity.getId());
+            final var dynamoItem = createDynamoItem(getSourceTable(entity), item);
 
             map.put(databaseKey, dynamoItem);
 
@@ -134,9 +129,9 @@ public final class InMemoryDynamoDb implements DynamoDb {
             final DataLoader<DatabaseKey, DynamoItem> items
     ) {
         final var tableTarget = table(type);
-        final var links = entry.getLinks().get(tableTarget);
+        final var links = getLinks(entry).get(tableTarget);
         final var keys = links.stream()
-                .map(link -> new DatabaseKey(organisationId, type, link))
+                .map(link -> createDatabaseKey(organisationId, type, link))
                 .collect(Collectors.toList());
 
         return items.loadMany(keys);
@@ -152,8 +147,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
         return CompletableFuture.supplyAsync(() -> {
             final var tableName = createTableNamedKey(type, value);
 
-            return getWithFilter(entry -> entry.getValue()
-                    .getItem()
+            return getWithFilter(entry -> getItem(entry.getValue())
                     .get(SECONDARY_GLOBAL)
                     .equals(tableName)
             );
@@ -170,7 +164,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
             final var tableName = createTableNamedKey(type, value);
 
             return getWithFilter(entry -> entry.getKey().getOrganisationId().equals(organisationId) &&
-                    entry.getValue().getItem().get(SECONDARY_ORGANISATION).equals(tableName));
+                    getItem(entry.getValue()).get(SECONDARY_ORGANISATION).equals(tableName));
         });
     }
 
@@ -182,7 +176,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
             final List<String> groupIds
     ) {
         return CompletableFuture.supplyAsync(() -> {
-            final var targetDatabaseKey = new DatabaseKey(organisationId, entry.getClass(), entry.getId());
+            final var targetDatabaseKey = createDatabaseKey(organisationId, entry.getClass(), entry.getId());
 
             final var targetItem = map.get(targetDatabaseKey);
             final var targetTable = table(entry.getClass());
@@ -191,7 +185,7 @@ public final class InMemoryDynamoDb implements DynamoDb {
             final var targetLinks = targetItem.getLinks().get(linkTable);
 
             targetLinks.forEach(linkedId -> {
-                final var linkedDatabaseKey = new DatabaseKey(organisationId, class1, linkedId);
+                final var linkedDatabaseKey = createDatabaseKey(organisationId, class1, linkedId);
                 map.get(linkedDatabaseKey).getLinks().get(targetTable).clear();
 
                 targetLinks.remove(linkedId);
@@ -200,11 +194,11 @@ public final class InMemoryDynamoDb implements DynamoDb {
             groupIds.forEach(groupId -> {
                 targetLinks.add(groupId);
 
-                final var groupDatabaseKey = new DatabaseKey(organisationId, class1, groupId);
+                final var groupDatabaseKey = createDatabaseKey(organisationId, class1, groupId);
                 map.get(groupDatabaseKey).getLinks().get(targetTable).add(targetItem.getId());
             });
 
-            entry.getLinks().putAll(targetItem.getLinks());
+            getLinks(entry).putAll(targetItem.getLinks());
 
             return entry;
         });
@@ -226,12 +220,12 @@ public final class InMemoryDynamoDb implements DynamoDb {
     }
 
     private <T extends Table> void appendSecondaryItemFields(final T entity, final HashMap<String, AttributeValue> item) {
-        final var secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
+        final var secondaryGlobal = getSecondaryGlobal(entity);
         if (secondaryGlobal != null) {
             item.put(SECONDARY_GLOBAL, createTableNamedKey(entity.getClass(), secondaryGlobal));
         }
 
-        final var secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
+        final var secondaryOrganisation = getSecondaryOrganisation(entity);
         if (secondaryOrganisation != null) {
             item.put(SECONDARY_ORGANISATION, createTableNamedKey(entity.getClass(), secondaryOrganisation));
         }

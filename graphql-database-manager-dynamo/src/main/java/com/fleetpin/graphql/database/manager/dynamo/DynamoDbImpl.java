@@ -12,35 +12,23 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
-import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
-import com.fleetpin.graphql.database.manager.DynamoDb;
-import com.fleetpin.graphql.database.manager.DynamoItem;
-import com.fleetpin.graphql.database.manager.table.Table;
-import com.fleetpin.graphql.database.manager.table.TableUtil;
-import com.fleetpin.graphql.database.manager.util.Flatterner;
-import org.dataloader.DataLoader;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import com.fleetpin.graphql.database.manager.*;
+import org.dataloader.DataLoader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
 
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
 import static com.fleetpin.graphql.database.manager.util.DynamoDbUtil.table;
 
-public final class DynamoDbImpl implements DynamoDb {
+public final class DynamoDbImpl extends AbstractDynamoDb {
 	private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
 
 	private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
@@ -64,7 +52,7 @@ public final class DynamoDbImpl implements DynamoDb {
 		var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
 		
 
-		String sourceOrganisation = entity.getSourceOrganistaionId();
+		String sourceOrganisation = getSourceOrganistaionId(entity);
 		
 		if(!sourceOrganisation.equals(organisationId)) {
 			//trying to delete a global or something just return without doing anything
@@ -72,7 +60,7 @@ public final class DynamoDbImpl implements DynamoDb {
 		}
 		
 		
-		String sourceTable = entity.getSourceTable();
+		String sourceTable = getSourceTable(entity);
 		if(sourceTable.equals(entityTable)) {
 			
 			Map<String, AttributeValue> key = new HashMap<>();
@@ -102,22 +90,22 @@ public final class DynamoDbImpl implements DynamoDb {
 		
 		if(entity.getId() == null) {
 			entity.setId(idGenerator.get());
-			entity.setCreatedAt(Instant.now());
+			setCreatedAt(entity, Instant.now());
 		}
 		if(entity.getCreatedAt() == null) {
-			entity.setCreatedAt(Instant.now()); //if missing for what ever reason
+			setCreatedAt(entity, Instant.now()); //if missing for what ever reason
 		}
-		entity.setUpdatedAt(Instant.now());
+		setUpdatedAt(entity, Instant.now());
 		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
 		var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
 		Map<String, AttributeValue> item = new HashMap<>();
 		item.put("organisationId", organisationIdAttribute);
 		item.put("id", id);
-		item.put("item", TableUtil.toAttributes(mapper, entity));
+		item.put("item", toAttributes(mapper, entity));
 		
 		
 		Map<String, AttributeValue> links = new HashMap<>();
-		entity.getLinks().asMap().forEach((table, link) -> {
+		getLinks(entity).asMap().forEach((table, link) -> {
 			if(!link.isEmpty()) {
 				links.put(table, AttributeValue.builder().ss(link).build());
 			}
@@ -125,10 +113,10 @@ public final class DynamoDbImpl implements DynamoDb {
 
 		
 		item.put("links", AttributeValue.builder().m(links).build());
-		entity.setSource(entityTable, entity.getLinks(), organisationId);
+		setSource(entity, entityTable, getLinks(entity), organisationId);
 
-		String secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
-		String secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
+		String secondaryOrganisation = getSecondaryOrganisation(entity);
+		String secondaryGlobal = getSecondaryGlobal(entity);
 		
 		
 		if(secondaryGlobal != null) {
@@ -179,7 +167,7 @@ public final class DynamoDbImpl implements DynamoDb {
 		return client.batchGetItem(builder -> builder.requestItems(items)).thenApply(response -> {
 			var responseItems = response.responses();
 
-			var flattener = new Flatterner();
+			var flattener = createFlatterner();
 			entityTables.forEach(table -> {
 				flattener.add(table, responseItems.get(table));
 			});
@@ -195,8 +183,8 @@ public final class DynamoDbImpl implements DynamoDb {
 	@Override
 	public CompletableFuture<List<DynamoItem>> getViaLinks(String organisationId, Table entry, Class<? extends Table> type, DataLoader<DatabaseKey, DynamoItem> items) {
 		String tableTarget = table(type);
-		var links = entry.getLinks().get(tableTarget);
-		var keys = links.stream().map(link -> new DatabaseKey(organisationId, type, link)).collect(Collectors.toList());
+		var links = getLinks(entry).get(tableTarget);
+		var keys = links.stream().map(link -> createDatabaseKey(organisationId, type, link)).collect(Collectors.toList());
 		return items.loadMany(keys);
 	}
 
@@ -217,7 +205,7 @@ public final class DynamoDbImpl implements DynamoDb {
 		}
 		
 		return future.thenApply(results -> {
-			var flattener = new Flatterner();
+			var flattener = createFlatterner();
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results();
 		});
@@ -235,7 +223,7 @@ public final class DynamoDbImpl implements DynamoDb {
 			});
 		}
 		return future.thenApply(results -> {
-			var flattener = new Flatterner();
+			var flattener = createFlatterner();
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results();
 		});
@@ -252,7 +240,7 @@ public final class DynamoDbImpl implements DynamoDb {
 				.keyConditionExpression("secondaryGlobal = :secondaryGlobal")
 				.expressionAttributeValues(keyConditions)
 		).subscribe(response -> {
-			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
+			response.items().forEach(item -> toReturn.add(createDynamoItem(table, item)));
 		}).thenApply(__ -> {
 			return toReturn;
 		});
@@ -270,7 +258,7 @@ public final class DynamoDbImpl implements DynamoDb {
 			});
 		}
 		return future.thenApply(results -> {
-			var flattener = new Flatterner();
+			var flattener = createFlatterner();
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results();
 		});
@@ -287,7 +275,7 @@ public final class DynamoDbImpl implements DynamoDb {
     				.keyConditionExpression("organisationId = :organisationId AND secondaryOrganisation = :secondaryOrganisation")
     				.expressionAttributeValues(keyConditions)
     		).subscribe(response -> {
-    			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
+    			response.items().forEach(item -> toReturn.add(createDynamoItem(table, item)));
     		}).thenApply(__ -> {
     			return toReturn;
     		});
@@ -305,7 +293,7 @@ public final class DynamoDbImpl implements DynamoDb {
 				.keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
 				.expressionAttributeValues(keyConditions)
 		).subscribe(response -> {
-			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
+			response.items().forEach(item -> toReturn.add(createDynamoItem(table, item)));
 		}).thenApply(__ -> {
 			return toReturn;
 		});
@@ -320,7 +308,7 @@ public final class DynamoDbImpl implements DynamoDb {
 		String target = table(class1);
 		CompletableFuture<?> future = CompletableFuture.completedFuture(null);
 		
-		var existing = entity.getLinks().get(target);
+		var existing = getLinks(entity).get(target);
 		
 		var toAdd = new HashSet<>(groupIds);
 		toAdd.removeAll(existing);
@@ -398,7 +386,7 @@ public final class DynamoDbImpl implements DynamoDb {
 			}else {
 				values.put(":val", AttributeValue.builder().ss(groupIds).build());
 			}
-			entity.setLinks(target, groupIds);
+			setLinks(entity, target, groupIds);
 
     		var destination = client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)").updateExpression("SET links.#table = :val" ).expressionAttributeNames(k).expressionAttributeValues(values))
     				.handle((r, e) -> {
@@ -439,7 +427,7 @@ public final class DynamoDbImpl implements DynamoDb {
 
 
 
-		for(var link: entity.getLinks().entries()) {
+		for(var link: getLinks(entity).entries()) {
 			var targetIdAttribute = AttributeValue.builder().s(link.getKey() + ":" + link.getValue()).build();
 			Map<String, AttributeValue> targetKey = new HashMap<>();
 			targetKey.put("organisationId", organisationIdAttribute);
@@ -454,7 +442,7 @@ public final class DynamoDbImpl implements DynamoDb {
 			var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val").expressionAttributeNames(k).expressionAttributeValues(v));
 			future = future.thenCombine(destination, (a,b) -> b);
 		}
-		entity.getLinks().clear();
+		getLinks(entity).clear();
 		return future.thenApply(__ -> entity);
 	}
 
