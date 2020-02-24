@@ -19,11 +19,12 @@ import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.DynamoItem;
+import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.dynamo.Database;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.memory.InMemoryDynamoDb;
@@ -127,7 +128,7 @@ final class DynamoDbInitializer {
 
     static Database getInMemoryDatabase(
             final String organisationId,
-            final ConcurrentHashMap<DatabaseKey, DynamoItem> map,
+            final ConcurrentHashMap<DatabaseKey, Table> map,
             final CompletableFuture<Object> future
     ) {
         final var objectMapper = new ObjectMapper()
@@ -141,11 +142,13 @@ final class DynamoDbInitializer {
                 .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
                 .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
 
+        final var factory = new JsonNodeFactory(false);
+
         final Supplier<String> idGenerator = () -> UUID.randomUUID().toString();
 
         final var database = DynamoDbManager.builder()
                 .tables("local")
-                .dynamoDb(new InMemoryDynamoDb(objectMapper, map, idGenerator))
+                .dynamoDb(new InMemoryDynamoDb(objectMapper, factory, map, idGenerator))
                 .build()
                 .getDatabase(organisationId);
 

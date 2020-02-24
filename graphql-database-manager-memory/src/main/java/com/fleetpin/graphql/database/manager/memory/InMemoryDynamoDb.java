@@ -13,9 +13,9 @@
 package com.fleetpin.graphql.database.manager.memory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.*;
 import com.fleetpin.graphql.database.manager.*;
 import org.dataloader.DataLoader;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -30,19 +30,22 @@ import java.util.stream.Collectors;
 
 import static com.fleetpin.graphql.database.manager.util.DynamoDbUtil.table;
 
-public final class InMemoryDynamoDb extends AbstractDynamoDb {
+public final class InMemoryDynamoDb extends DatabaseDriver {
     private static final String SECONDARY_GLOBAL = "secondaryGlobal";
     private static final String SECONDARY_ORGANISATION = "secondaryOrganisation";
     private final ObjectMapper objectMapper;
-    private final ConcurrentHashMap<DatabaseKey, DynamoItem> map;
+    private final JsonNodeFactory factory;
+    private final ConcurrentHashMap<DatabaseKey, Table> map;
     private final Supplier<String> idGenerator;
 
     public InMemoryDynamoDb(
             final ObjectMapper objectMapper,
-            final ConcurrentHashMap<DatabaseKey, DynamoItem> map,
+            final JsonNodeFactory factory,
+            final ConcurrentHashMap<DatabaseKey, Table> map,
             final Supplier<String> idGenerator
     ) {
         this.objectMapper = objectMapper;
+        this.factory = factory;
         this.map = map;
         this.idGenerator = idGenerator;
     }
@@ -66,8 +69,8 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
             final var databaseKey = createDatabaseKey(organisationId, entity.getClass(), entity.getId());
             final var item = map.get(databaseKey);
 
-            map.forEach((key, value) -> value.getLinks().get(table(entity.getClass())).clear());
-            item.getLinks().clear();
+            map.forEach((key, value) -> getLinks(value).get(table(entity.getClass())).clear());
+            getLinks(item).clear();
 
             getLinks(entity).clear();
             return entity;
@@ -84,17 +87,13 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
 
             setUpdatedAt(entity, Instant.now());
 
-            final var links = AttributeValue.builder().m(getLinks(entity)
-                    .entries()
-                    .stream()
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            value -> AttributeValue.builder().ss(value.getValue()).build()
-                    ))
-            ).build();
+            final var links = factory.objectNode();
+            getLinks(entity).entries().forEach(entry -> {
+                links.put(entry.getKey(), entry.getValue());
+            });
 
-            final var item = new HashMap<String, AttributeValue>();
-            item.put("organisationId", AttributeValue.builder().s(organisationId).build());
+            final var item = new HashMap<String, BaseJsonNode>();
+            item.put("organisationId", factory.textNode(organisationId));
             item.put("id", createTableNamedKey(entity.getClass(), entity.getId()));
             item.put("item", toAttributes(objectMapper, entity));
             item.put("links", links);
@@ -110,7 +109,7 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
     }
 
     @Override
-    public CompletableFuture<List<DynamoItem>> get(final List<DatabaseKey> keys) {
+    public <T extends Table> CompletableFuture<List<T>> get(final List<DatabaseKey> keys) {
         return CompletableFuture.supplyAsync(() -> keys.stream()
                 .map(key -> map.entrySet()
                         .stream()
@@ -122,11 +121,11 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
     }
 
     @Override
-    public CompletableFuture<List<DynamoItem>> getViaLinks(
+    public <T extends Table> CompletableFuture<List<T>> getViaLinks(
             final String organisationId,
             final Table entry,
             final Class<? extends Table> type,
-            final DataLoader<DatabaseKey, DynamoItem> items
+            final DataLoader<DatabaseKey, T> items
     ) {
         final var tableTarget = table(type);
         final var links = getLinks(entry).get(tableTarget);
@@ -138,12 +137,12 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
     }
 
     @Override
-    public CompletableFuture<List<DynamoItem>> query(final DatabaseQueryKey key) {
+    public <T extends Table> CompletableFuture<List<T>> query(final DatabaseQueryKey key) {
         return CompletableFuture.supplyAsync(() -> getWithFilter(entry -> foundInMap(entry, key)));
     }
 
     @Override
-    public CompletableFuture<List<DynamoItem>> queryGlobal(final Class<? extends Table> type, final String value) {
+    public <T extends Table> CompletableFuture<List<T>> queryGlobal(final Class<? extends Table> type, final String value) {
         return CompletableFuture.supplyAsync(() -> {
             final var tableName = createTableNamedKey(type, value);
 
@@ -155,7 +154,7 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
     }
 
     @Override
-    public CompletableFuture<List<DynamoItem>> querySecondary(
+    public <T extends Table> CompletableFuture<List<T>> querySecondary(
             final Class<? extends Table> type,
             final String organisationId,
             final String value
@@ -214,13 +213,13 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
         return idGenerator.get();
     }
 
-    private AttributeValue createTableNamedKey(final Class<? extends Table> type, final String id) {
+    private TextNode createTableNamedKey(final Class<? extends Table> type, final String id) {
         final var tableName = table(type);
-        return AttributeValue.builder().s(tableName + ":" + id).build();
+        return T.builder().s(tableName + ":" + id).build();
     }
 
-    private <T extends Table> void appendSecondaryItemFields(final T entity, final HashMap<String, AttributeValue> item) {
-        final var secondaryGlobal = getSecondaryGlobal(entity);
+    private <T extends Table> void appendSecondaryItemFields(final T entity, final HashMap<String, TextNode> item) {
+        final var secondaryGlobal = entity;
         if (secondaryGlobal != null) {
             item.put(SECONDARY_GLOBAL, createTableNamedKey(entity.getClass(), secondaryGlobal));
         }
@@ -231,7 +230,7 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
         }
     }
 
-    private List<DynamoItem> getWithFilter(final Predicate<Map.Entry<DatabaseKey, DynamoItem>> filterPredicate) {
+    private <T extends Table> List<T> getWithFilter(final Predicate<Map.Entry<DatabaseKey, T>> filterPredicate) {
         return map.entrySet()
                 .stream()
                 .filter(filterPredicate)
@@ -239,12 +238,12 @@ public final class InMemoryDynamoDb extends AbstractDynamoDb {
                 .collect(Collectors.toList());
     }
 
-    private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseKey key) {
+    private <T extends Table> boolean foundInMap(final Map.Entry<DatabaseKey, T> entry, final DatabaseKey key) {
         return key.equals(entry.getKey()) ||
                 (entry.getKey().getOrganisationId().equals("global") && key.getId().equals(entry.getKey().getId()));
     }
 
-    private boolean foundInMap(final Map.Entry<DatabaseKey, DynamoItem> entry, final DatabaseQueryKey key) {
+    private <T extends Table> boolean foundInMap(final Map.Entry<DatabaseKey, T> entry, final DatabaseQueryKey key) {
         return key.getType().isAssignableFrom(entry.getKey().getType()) &&
                 (entry.getKey().getOrganisationId().equals("global") || key.getOrganisationId().equals(entry.getKey().getOrganisationId()));
     }

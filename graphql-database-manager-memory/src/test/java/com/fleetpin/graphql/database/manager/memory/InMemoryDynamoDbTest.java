@@ -21,8 +21,6 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.builder.annotations.Id;
-import com.fleetpin.graphql.database.manager.AbstractTestDynamoDb;
-import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
@@ -52,7 +50,7 @@ final class InMemoryDynamoDbTest extends AbstractTestDynamoDb {
                 .disable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS).disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).disable(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS).disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
                 .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
 
-        inMemoryDynamoDb = new InMemoryDynamoDb(mapper, new ConcurrentHashMap<>(), () -> "generated-id");
+        inMemoryDynamoDb = new InMemoryDynamoDb(mapper, factory, new ConcurrentHashMap<>(), () -> "generated-id");
     }
 
     @Test

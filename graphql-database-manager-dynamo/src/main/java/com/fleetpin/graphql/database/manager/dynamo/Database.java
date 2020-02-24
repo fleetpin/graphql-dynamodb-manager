@@ -29,42 +29,41 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class Database extends AbstractDatabase {
-
+public class Database {
 	private String organisationId;
-	private final AbstractDynamoDb dynamo;
+	private final DatabaseDriver dynamo;
 
 	private final ObjectMapper mapper;
 	
-	private final DataLoader<DatabaseKey, DynamoItem> items;
-	private final DataLoader<DatabaseQueryKey, List<DynamoItem>> queries;
+	private final DataLoader<DatabaseKey, Table> items;
+	private final DataLoader<DatabaseQueryKey, List<Table>> queries;
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 	
-	Database(ObjectMapper mapper, String organisationId, AbstractDynamoDb dynamo, ModificationPermission putAllow) {
+	Database(ObjectMapper mapper, String organisationId, DatabaseDriver dynamo, ModificationPermission putAllow) {
 		this.mapper = mapper;
 		this.organisationId = organisationId;
 		this.dynamo = dynamo;
 		this.putAllow = putAllow;
 
-		items = new DataLoader<DatabaseKey, DynamoItem>(keys -> {
+		items = new DataLoader<DatabaseKey, Table>(keys -> {
 			return dynamo.get(keys);
 		}, DataLoaderOptions.newOptions().setMaxBatchSize(dynamo.maxBatchSize())); // will auto call global
 		
-		queries = new DataLoader<DatabaseQueryKey, List<DynamoItem>>(keys -> {
+		queries = new DataLoader<DatabaseQueryKey, List<Table>>(keys -> {
 			return merge(keys.stream().map(key -> dynamo.query(key)));
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false)); // will auto call global
 	}
 
 
 	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type) {
-		return queries.load(createDatabaseQueryKey(organisationId, type))
-				.thenApply(items -> items.stream().map(item -> item.convertTo(mapper, type)).filter(Objects::nonNull).collect(Collectors.toList()));
+		return queries.load(KeyFactory.createDatabaseQueryKey(organisationId, type))
+				.thenApply(items -> items.stream().map(item -> (T) item).filter(Objects::nonNull).collect(Collectors.toList()));
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String id) {
 		return dynamo.queryGlobal(type, id)
-				.thenApply(items -> items.stream().map(item -> item.convertTo(mapper, type)).collect(Collectors.toList()));
+				.thenApply(items -> items.stream().map(item -> (T) item).collect(Collectors.toList()));
 	}
 	public <T extends Table> CompletableFuture<T> queryGlobalUnique(Class<T> type, String id) {
 		return queryGlobal(type, id).thenApply(items -> {
@@ -80,7 +79,7 @@ public class Database extends AbstractDatabase {
 
 	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String id) {
 		return dynamo.querySecondary(type, organisationId, id)
-				.thenApply(items -> items.stream().map(item -> item.convertTo(mapper, type)).collect(Collectors.toList()));
+				.thenApply(items -> items.stream().map(item -> (T) item).collect(Collectors.toList()));
 	}
 	public <T extends Table> CompletableFuture<T> querySecondaryUnique(Class<T> type, String id) {
 		return querySecondary(type, id).thenApply(items -> {
@@ -97,28 +96,24 @@ public class Database extends AbstractDatabase {
 		if(id == null) {
 			return CompletableFuture.completedFuture(Optional.empty());
 		}
-		return items.load(createDatabaseKey(organisationId, type, id)).thenApply(item -> {
+		return items.load(KeyFactory.createDatabaseKey(organisationId, type, id)).thenApply(item -> {
 			if(item == null) {
 				return Optional.empty();
 			}else {
-				return Optional.of(item.convertTo(mapper, type));
+				return Optional.of((T) item);
 			}
 		});
 	}
 	
 	public <T extends Table> CompletableFuture<T> get(Class<T> type, String id) {
-		return items.load(createDatabaseKey(organisationId, type, id)).thenApply(item -> {
-			if(item == null) {
-				return null;
-			}else {
-				return item.convertTo(mapper, type);
-			}
+		return items.load(KeyFactory.createDatabaseKey(organisationId, type, id)).thenApply(item -> {
+		return (T) item;
 		});
 	}
 
 	public <T extends Table> CompletableFuture<T> delete(T entity, boolean deleteLinks) {
 		if(!deleteLinks) {
-			if(!getLinks(entity).isEmpty()) {
+			if(!TableAccess.getTableLinks(entity).isEmpty()) {
 				throw new RuntimeException("deleting would leave dangling links");
 			}
 		}
@@ -126,8 +121,8 @@ public class Database extends AbstractDatabase {
 			if(!allow) {
 				throw new ForbiddenWriteException("Delete not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(createDatabaseQueryKey(organisationId, entity.getClass()));
+    		items.clear(KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass()));
     		
     		if(deleteLinks) {
     			return deleteLinks(entity).thenCompose(t -> dynamo.delete(organisationId, entity));
@@ -137,23 +132,23 @@ public class Database extends AbstractDatabase {
 		});
 	}
 
-	public <T extends Table> CompletableFuture<List<T>> getLinks(Table entry, Class<T> type) {
-		return dynamo.getViaLinks(organisationId, entry, type, items)
-			.thenApply(items -> items.stream().map(item -> item.convertTo(mapper, type)).filter(Objects::nonNull).collect(Collectors.toList()));
+	public <T extends Table> CompletableFuture<List<T>> getLinks(final T entry) {
+		return dynamo.getViaLinks(organisationId, entry, entry.getClass(), items)
+			.thenApply(items -> items.stream().filter(Objects::nonNull).map(item -> (T) item).collect(Collectors.toList()));
 	}
 
-	public <T extends Table> CompletableFuture<T> getLink(Table entry, Class<T> type) {
-		return getLinks(entry, type).thenApply(items -> {
+	public <T extends Table> CompletableFuture<T> getLink(final T entry) {
+		return getLinks(entry).thenApply(items -> {
 			if (items.size() > 1) {
 				throw new RuntimeException("Bad data"); // TODO: more info in failure
 			}
-			return items.stream().findFirst().orElse(null);
+			return (T) items.stream().findFirst().orElse(null);
 		});
 
 	}
 	
-	public <T extends Table> CompletableFuture<Optional<T>> getLinkOptional(Table entry, Class<T> type) {
-		return getLink(entry, type).thenApply(t -> Optional.ofNullable(t));
+	public <T extends Table> CompletableFuture<Optional<T>> getLinkOptional(final T entry) {
+		return getLink(entry).thenApply(t -> Optional.ofNullable(t));
 
 	}
 
@@ -171,8 +166,8 @@ public class Database extends AbstractDatabase {
 			if(!allow) {
 				throw new ForbiddenWriteException("put not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(createDatabaseQueryKey(organisationId, entity.getClass()));
+    		items.clear(KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass()));
     		return dynamo.put(organisationId, entity);
 		});
 	}
@@ -181,8 +176,8 @@ public class Database extends AbstractDatabase {
 			if(!allow) {
 				throw new ForbiddenWriteException("put global not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(createDatabaseKey("global", entity.getClass(), entity.getId()));
-    		queries.clear(createDatabaseQueryKey("global", entity.getClass()));
+    		items.clear(KeyFactory.createDatabaseKey("global", entity.getClass(), entity.getId()));
+    		queries.clear(KeyFactory.createDatabaseQueryKey("global", entity.getClass()));
     		return dynamo.put("global", entity);
 		});
 		
@@ -229,12 +224,12 @@ public class Database extends AbstractDatabase {
 			if(!allow) {
 				throw new ForbiddenWriteException("Link not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(createDatabaseQueryKey(organisationId, entity.getClass()));
+    		items.clear(KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass()));
     		for(String id: targetIds) {
-    			items.clear(createDatabaseKey(organisationId, class1, id));
+    			items.clear(KeyFactory.createDatabaseKey(organisationId, class1, id));
     		}
-    		queries.clear(createDatabaseQueryKey(organisationId, class1));
+    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, class1));
     		return dynamo.link(organisationId, entity, class1, targetIds);
 		});
 	}
@@ -253,7 +248,7 @@ public class Database extends AbstractDatabase {
 		if(ids == null) {
 			return CompletableFuture.completedFuture(Collections.emptyList());
 		}
-		return all(ids.stream().map(id -> get(class1, id)).collect(Collectors.toList()));
+		return TableUtil.all(ids.stream().map(id -> get(class1, id)).collect(Collectors.toList()));
 	}
 
 
@@ -263,7 +258,7 @@ public class Database extends AbstractDatabase {
 
 
 	public String getSourceOrganisationId(Table table) {
-		return getSourceOrganistaionId(table);
+		return TableAccess.getTableSourceOrganisation(table);
 	}
 
 	public String newId() {
@@ -272,7 +267,7 @@ public class Database extends AbstractDatabase {
 
 
 	public Set<String> getLinkIds(Table entity, Class<? extends Table> type) {
-		return Collections.unmodifiableSet(getLinks(entity).get(DynamoDbUtil.table(type)));
+		return Collections.unmodifiableSet(TableAccess.getTableLinks(entity).get(DynamoDbUtil.table(type)));
 	}
 	
 }

@@ -14,7 +14,8 @@ package com.fleetpin.graphql.database.manager.test;
 
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.DynamoItem;
+import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.dynamo.DynamoItem;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.params.provider.Arguments;
@@ -60,14 +61,14 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
                 throw new IllegalArgumentException("Not enough organisationIds were provided via @TestDatabase.");
             }
 
-            final var map = new ConcurrentHashMap<DatabaseKey, DynamoItem>();
+            final var map = new ConcurrentHashMap<DatabaseKey, Table>();
             return buildParameters(client, map, testDatabase, organisationIds);
         }
     }
 
     private Stream<Arguments> buildParameters(
             final DynamoDbAsyncClient async,
-            final ConcurrentHashMap<DatabaseKey, DynamoItem> map,
+            final ConcurrentHashMap<DatabaseKey, Table> map,
             final TestDatabase testDatabase,
             final String[] organisationIds
     ) {

@@ -10,11 +10,13 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager;
+package com.fleetpin.graphql.database.manager.dynamo;
 
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.TableAccess;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 
@@ -59,8 +61,8 @@ public class DynamoItem implements Comparable<DynamoItem>{
 			return null;
 		}
 		var table = TableUtil.convertTo(mapper, item.get("item"), type);
-		if(table != null && table instanceof Table) {
-			((Table) table).setSource(this.table, links, item.get("organisationId").s());
+		if(table instanceof Table) {
+			TableAccess.setTableSource((Table) table, this.table, links, item.get("organisationId").s());
 		}
 		return table;
 	}

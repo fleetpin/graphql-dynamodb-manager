@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 
 import static com.fleetpin.graphql.database.manager.util.DynamoDbUtil.table;
 
-public final class DynamoDbImpl extends AbstractDynamoDb {
+public final class DynamoDb extends DatabaseDriver {
 	private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
 
 	private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
@@ -37,7 +37,7 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 	private final ObjectMapper mapper;
 	private final Supplier<String> idGenerator;
 
-	public DynamoDbImpl(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
+	public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
 		this.mapper = mapper;
 		this.entityTables = entityTables;
 		this.entityTable = entityTables.get(entityTables.size() - 1);
@@ -101,7 +101,7 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 		Map<String, AttributeValue> item = new HashMap<>();
 		item.put("organisationId", organisationIdAttribute);
 		item.put("id", id);
-		item.put("item", toAttributes(mapper, entity));
+		item.put("item", TableUtil.toAttributes(mapper, entity));
 		
 		
 		Map<String, AttributeValue> links = new HashMap<>();
@@ -115,8 +115,8 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 		item.put("links", AttributeValue.builder().m(links).build());
 		setSource(entity, entityTable, getLinks(entity), organisationId);
 
-		String secondaryOrganisation = getSecondaryOrganisation(entity);
-		String secondaryGlobal = getSecondaryGlobal(entity);
+		String secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
+		String secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
 		
 		
 		if(secondaryGlobal != null) {
@@ -140,7 +140,7 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 	}
 
 
-	public CompletableFuture<List<DynamoItem>> get(List<DatabaseKey> keys) {
+	public <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey> keys) {
 		List<Map<String, AttributeValue>> entries = new ArrayList<>(keys.size() * 2);
 
 		keys.forEach(key -> {
@@ -167,11 +167,11 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 		return client.batchGetItem(builder -> builder.requestItems(items)).thenApply(response -> {
 			var responseItems = response.responses();
 
-			var flattener = createFlatterner();
+			var flattener = new Flatterner();
 			entityTables.forEach(table -> {
 				flattener.add(table, responseItems.get(table));
 			});
-			var toReturn = new ArrayList<DynamoItem>();
+			var toReturn = new ArrayList<T>();
 			for(var key: keys) {
 				toReturn.add(flattener.get(key.getId()));
 			}
@@ -181,18 +181,18 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 	
 	
 	@Override
-	public CompletableFuture<List<DynamoItem>> getViaLinks(String organisationId, Table entry, Class<? extends Table> type, DataLoader<DatabaseKey, DynamoItem> items) {
+	public <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<? extends Table> type, DataLoader<DatabaseKey, T> items) {
 		String tableTarget = table(type);
 		var links = getLinks(entry).get(tableTarget);
 		var keys = links.stream().map(link -> createDatabaseKey(organisationId, type, link)).collect(Collectors.toList());
 		return items.loadMany(keys);
 	}
 
-	public CompletableFuture<List<DynamoItem>> query(DatabaseQueryKey key) {
+	public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey key) {
 		var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
 		var id = AttributeValue.builder().s(table(key.getType()) + ":").build();
 		
-		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+		CompletableFuture<List<List<T>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
 			future = future.thenCombine(query(table, GLOBAL, id), (a, b) -> {
 				a.add(b);
@@ -205,17 +205,17 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 		}
 		
 		return future.thenApply(results -> {
-			var flattener = createFlatterner();
+			var flattener = new Flatterner();
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results();
 		});
 		
 	}
 	
-	public CompletableFuture<List<DynamoItem>> queryGlobal(Class<? extends Table> type, String value) {
+	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<? extends Table> type, String value) {
 		var id = AttributeValue.builder().s(table(type) + ":" + value).build();
 		
-		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+		CompletableFuture<List<List<T>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
 			future = future.thenCombine(queryGlobal(table, id), (a, b) -> {
 				a.add(b);
@@ -223,34 +223,34 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 			});
 		}
 		return future.thenApply(results -> {
-			var flattener = createFlatterner();
+			var flattener = new Flatterner();
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results();
 		});
 		
 	}
 	
-	private CompletableFuture<List<DynamoItem>> queryGlobal(String table, AttributeValue id) {
+	private <T extends Table> CompletableFuture<List<T>> queryGlobal(String table, AttributeValue id) {
 		
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
 		keyConditions.put(":secondaryGlobal", id);
 
-		var toReturn = new ArrayList<DynamoItem>();
+		var toReturn = new ArrayList<T>();
 		return client.queryPaginator(r -> r.tableName(table).indexName("secondaryGlobal")
 				.keyConditionExpression("secondaryGlobal = :secondaryGlobal")
 				.expressionAttributeValues(keyConditions)
 		).subscribe(response -> {
-			response.items().forEach(item -> toReturn.add(createDynamoItem(table, item)));
+			response.items().forEach(item -> toReturn.add(table));
 		}).thenApply(__ -> {
 			return toReturn;
 		});
 	}
 	@Override
-	public CompletableFuture<List<DynamoItem>> querySecondary(Class<? extends Table> type, String organisationId, String value) {
+	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<? extends Table> type, String organisationId, String value) {
 		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
 		var id = AttributeValue.builder().s(table(type) + ":" + value).build();
 		
-		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+		CompletableFuture<List<List<T>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
 			future = future.thenCombine(querySecondary(table, organisationIdAttribute, id), (a, b) -> {
 				a.add(b);
@@ -258,7 +258,7 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
 			});
 		}
 		return future.thenApply(results -> {
-			var flattener = createFlatterner();
+			var flattener = new Flatterner();
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results();
 		});
@@ -275,25 +275,25 @@ public final class DynamoDbImpl extends AbstractDynamoDb {
     				.keyConditionExpression("organisationId = :organisationId AND secondaryOrganisation = :secondaryOrganisation")
     				.expressionAttributeValues(keyConditions)
     		).subscribe(response -> {
-    			response.items().forEach(item -> toReturn.add(createDynamoItem(table, item)));
+    			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
     		}).thenApply(__ -> {
     			return toReturn;
     		});
     	}
 	
-	private CompletableFuture<List<DynamoItem>> query(String table, AttributeValue organisationId, AttributeValue id) {
+	private <T extends Table> CompletableFuture<List<T>> query(String table, AttributeValue organisationId, AttributeValue id) {
 		
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
 		keyConditions.put(":organisationId", organisationId);
 		keyConditions.put(":table", id);
 
-		var toReturn = new ArrayList<DynamoItem>();
+		var toReturn = new ArrayList<T>();
 		return client.queryPaginator(r -> r.tableName(table)
 				.consistentRead(true)
 				.keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
 				.expressionAttributeValues(keyConditions)
 		).subscribe(response -> {
-			response.items().forEach(item -> toReturn.add(createDynamoItem(table, item)));
+			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
 		}).thenApply(__ -> {
 			return toReturn;
 		});

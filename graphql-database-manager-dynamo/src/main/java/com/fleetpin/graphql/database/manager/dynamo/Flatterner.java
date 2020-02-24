@@ -10,7 +10,7 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager;
+package com.fleetpin.graphql.database.manager.dynamo;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,12 +18,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fleetpin.graphql.database.manager.DynamoItem;
+import com.fleetpin.graphql.database.manager.Table;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public final class Flatterner {
 
-	private final Map<String, DynamoItem> lookup;
+	private final Map<String, Table> lookup;
 	
 	
 	Flatterner() {
@@ -31,9 +31,9 @@ public final class Flatterner {
 	}
 	
 	
-	public void add(String table, List<Map<String, AttributeValue>> list) {
+	public <T extends Table> void add(String table, List<Map<String, AttributeValue>> list) {
 		list.forEach(item -> {
-			var i = new DynamoItem(table, item);
+			var i = new T(table, item);
 			if(i.isDeleted()) {
 				lookup.remove(i.getId());
 			}else {
@@ -44,12 +44,12 @@ public final class Flatterner {
 	}
 
 
-	public DynamoItem get(String id) {
-		return lookup.get(id);
+	public <T extends Table> T get(String id) {
+		return (T) lookup.get(id);
 	}
 
 
-	public void addItems(List<DynamoItem> list) {
+	public <T extends Table> void addItems(List<T> list) {
 		list.forEach(item -> {
 			if(item.isDeleted()) {
 				lookup.remove(item.getId());
@@ -60,21 +60,21 @@ public final class Flatterner {
 		
 	}
 	
-	public DynamoItem merge(DynamoItem existing, DynamoItem replace) {
+	public <T extends Table> T merge(T existing, T replace) {
 		var item = new HashMap<>(replace.getItem());
 		//only links in parent
 		if(item.get("item") == null) {
 			item.put("item", existing.getItem().get("item"));
 		}
-		var toReturn = new DynamoItem(replace.getTable(), item);
+		var toReturn = new T(replace.getTable(), item);
 		toReturn.getLinks().putAll(existing.getLinks());
 
 		return toReturn;
 	}
 
 
-	public List<DynamoItem> results() {
-		var items = new ArrayList<DynamoItem>(lookup.values());
+	public <T extends Table> List<T> results() {
+		var items = new ArrayList<T>(lookup.values());
 		Collections.sort(items);
 		return items;
 	}
