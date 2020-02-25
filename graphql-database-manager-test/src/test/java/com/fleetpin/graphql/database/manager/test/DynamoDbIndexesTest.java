@@ -16,10 +16,14 @@ import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
+import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
+import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 final class DynamoDbIndexesTest {
@@ -145,9 +149,35 @@ final class DynamoDbIndexesTest {
 
 	}
 	
-	//TODO:add test with multiple organisations for global and secondary indexes to confirm no funny business
+	@TestDatabase
+	void testMultiOrganisationSecondaryIndexWithDynamoDbManager(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
+		final var db0 = dynamoDbManager.getDatabase("organisation-0");
+		final var db1 = dynamoDbManager.getDatabase("organisation-1");
+		db0.start(new CompletableFuture<>());
+		db1.start(new CompletableFuture<>());
 
-	
+		final var putAvocado = db0.put(new SimpleTable("avocado", "fruit")).get();
+
+		final var exists = db0.get(SimpleTable.class, putAvocado.getId()).get();
+		Assertions.assertNotNull(exists);
+		Assertions.assertEquals(putAvocado, exists);
+
+		final var nonExistent = db1.get(SimpleTable.class, "avocado").get();
+		Assertions.assertNull(nonExistent);
+	}
+
+	@TestDatabase
+	void testMultiOrganisationSecondaryIndexWithAnnotations(@DatabaseOrganisation("newdude") final Database db0, final Database db1) throws ExecutionException, InterruptedException {
+		final var putJohn = db0.put(new SimpleTable("john", "nhoj")).get();
+		
+		final var exists = db0.get(SimpleTable.class, putJohn.getId()).get();
+		Assertions.assertNotNull(exists);
+		Assertions.assertEquals(putJohn, exists);
+
+		final var nonExistent = db1.get(SimpleTable.class, putJohn.getId()).get();
+		Assertions.assertNull(nonExistent);
+	}
+
 	public static class SimpleTable extends Table {
 		private String name;
 		private String globalLookup;
