@@ -14,24 +14,9 @@ package com.fleetpin.graphql.database.manager.test;
 
 import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.database.manager.Database;
-import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
-import com.fleetpin.graphql.database.manager.memory.InMemoryDynamoDb;
-
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.AwsCredentials;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -41,15 +26,16 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Supplier;
 
 final class DynamoDbInitializer {
     @SuppressWarnings("unchecked")
     static void createTable(final DynamoDbAsyncClient client, final String name) throws ExecutionException, InterruptedException {
+        if (client.listTables().get().tableNames().contains(name)) {
+            return;
+        }
+
         client.createTable(t -> t.tableName(name).keySchema(
                 KeySchemaElement.builder()
                         .attributeName("organisationId")
@@ -90,8 +76,8 @@ final class DynamoDbInitializer {
 
     static DynamoDbAsyncClient startDynamoClient(final String port) throws URISyntaxException {
         return DynamoDbAsyncClient.builder()
-        		.region(Region.AWS_GLOBAL)
-        		.credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("anything", "anything")))
+                .region(Region.AWS_GLOBAL)
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("anything", "anything")))
                 .endpointOverride(new URI("http://localhost:" + port))
                 .build();
     }
@@ -104,34 +90,22 @@ final class DynamoDbInitializer {
         return port;
     }
 
-    static Database getProductionDatabase(
+    static Database getEmbeddedDatabase(
+            final DynamoDbManager dynamoDbManager,
             final String organisationId,
-            final DynamoDbAsyncClient client,
             final CompletableFuture<Object> future
     ) {
-        final var database = DynamoDbManager.builder()
-                .tables("prod")
-                .dynamoDbAsyncClient(client)
-                .build()
-                .getDatabase(organisationId);
+        final var database = dynamoDbManager.getDatabase(organisationId);
         database.start(future);
 
         return database;
     }
 
-    static Database getEmbeddedDatabase(
-            final String organisationId,
-            final DynamoDbAsyncClient client,
-            final CompletableFuture<Object> future
-    ) {
-        final var database = DynamoDbManager.builder()
-                .tables("prod", "stage")
+    static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final String[] tables) {
+        return DynamoDbManager.builder()
+                .tables(tables)
                 .dynamoDbAsyncClient(client)
-                .build()
-                .getDatabase(organisationId);
-        database.start(future);
-
-        return database;
+                .build();
     }
 
 //    static Database getInMemoryDatabase(
