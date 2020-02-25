@@ -169,7 +169,7 @@ final class DynamoDbIndexesTest {
 	@TestDatabase
 	void testMultiOrganisationSecondaryIndexWithAnnotations(@DatabaseOrganisation("newdude") final Database db0, final Database db1) throws ExecutionException, InterruptedException {
 		final var putJohn = db0.put(new SimpleTable("john", "nhoj")).get();
-		
+
 		final var exists = db0.get(SimpleTable.class, putJohn.getId()).get();
 		Assertions.assertNotNull(exists);
 		Assertions.assertEquals(putJohn, exists);

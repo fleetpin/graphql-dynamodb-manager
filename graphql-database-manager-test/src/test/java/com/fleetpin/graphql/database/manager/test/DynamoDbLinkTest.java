@@ -15,10 +15,13 @@ package com.fleetpin.graphql.database.manager.test;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
+import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 final class DynamoDbLinkTest {
@@ -130,7 +133,36 @@ final class DynamoDbLinkTest {
 
 	}
 
-	//TODO: test link joining logic between global org and multiple databases
+	@TestDatabase
+	void testLinkingBetweenMultiOrganisations(
+			@DatabaseOrganisation("bestorg") final Database db0,
+			@DatabaseOrganisation("amazingorg") final Database db1
+	) throws ExecutionException, InterruptedException {
+		final var putAlexBestOrg = db0.put(new SimpleTable("alex")).get();
+		Assertions.assertNotNull(db0.get(SimpleTable.class, putAlexBestOrg.getId()).get());
+
+		final var putPineappleAmazingOrg = db1.put(new AnotherTable("pineapple")).get();
+		Assertions.assertNotNull(db1.get(AnotherTable.class, putPineappleAmazingOrg.getId()).get());
+
+		db0.link(putAlexBestOrg, putPineappleAmazingOrg.getClass(), putPineappleAmazingOrg.getId()).get();
+		Assertions.assertTrue(db0.getLinks(putAlexBestOrg, AnotherTable.class).get().isEmpty());
+	}
+
+	@TestDatabase
+	void testLinkingBetweenDatabases(final Database db0, final Database db1) throws ExecutionException, InterruptedException {
+		final var putAlexBestOrg = db0.put(new SimpleTable("alex")).get();
+		Assertions.assertNotNull(db0.get(SimpleTable.class, putAlexBestOrg.getId()).get());
+
+		final var putPineappleAmazingOrg = db1.put(new AnotherTable("pineapple")).get();
+		Assertions.assertNotNull(db1.get(AnotherTable.class, putPineappleAmazingOrg.getId()).get());
+
+		db0.link(putAlexBestOrg, putPineappleAmazingOrg.getClass(), putPineappleAmazingOrg.getId()).get();
+		Assertions.assertFalse(db0.getLinks(putAlexBestOrg, AnotherTable.class).get().isEmpty());
+		Assertions.assertEquals(
+				putPineappleAmazingOrg.getId(),
+				db0.getLinks(putAlexBestOrg, AnotherTable.class).get().get(0).getId()
+		);
+	}
 
 	static class SimpleTable extends Table {
 		private String name;
