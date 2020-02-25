@@ -148,7 +148,7 @@ public class Database {
 	public <T extends Table> CompletableFuture<T> getLink(final Table entry, Class<T> target) {
 		return getLinks(entry, target).thenApply(items -> {
 			if (items.size() > 1) {
-				throw new RuntimeException("Bad data"); // TODO: more info in failure
+				throw new RuntimeException("Requests a link that expects a single mapping but found multiple entities"); // TODO: more info in failure
 			}
 			return (T) items.stream().findFirst().orElse(null);
 		});

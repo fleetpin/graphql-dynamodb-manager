@@ -2,7 +2,7 @@ package com.fleetpin.graphql.database.manager;
 
 import com.google.common.collect.HashMultimap;
 
-public final class TableAccess {
+public interface TableAccess {
     public static <T extends Table> void setTableSource(
             final T table,
             final String sourceTable,

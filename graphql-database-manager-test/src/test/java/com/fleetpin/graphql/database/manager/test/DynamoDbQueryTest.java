@@ -165,6 +165,11 @@ final class DynamoDbQueryTest {
 		public String getName() {
 			return name;
 		}
+		
+		@Override
+		public String toString() {
+			return name;
+		}
 	}
 
 	static class AnotherTable extends Table {

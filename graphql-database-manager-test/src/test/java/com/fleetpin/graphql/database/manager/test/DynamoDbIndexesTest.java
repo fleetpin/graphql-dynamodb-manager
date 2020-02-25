@@ -26,12 +26,16 @@ final class DynamoDbIndexesTest {
 
 	@TestDatabase
 	void testGlobal(final Database db) throws InterruptedException, ExecutionException {
+		
+		var list = db.queryGlobal(SimpleTable.class, "john").get();
+		Assertions.assertEquals(0, list.size());
+		
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
 
-		var list = db.queryGlobal(SimpleTable.class, "john").get();
+		list = db.queryGlobal(SimpleTable.class, "john").get();
 		Assertions.assertEquals(1, list.size());
 
 		Assertions.assertEquals("garry", list.get(0).getName());
@@ -61,12 +65,17 @@ final class DynamoDbIndexesTest {
 
 	@TestDatabase
 	void testSecondary(final Database db) throws InterruptedException, ExecutionException {
+
+		var list = db.querySecondary(SimpleTable.class, "garry").get();
+		Assertions.assertEquals(0, list.size());
+
+		
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
 
-		var list = db.querySecondary(SimpleTable.class, "garry").get();
+		list = db.querySecondary(SimpleTable.class, "garry").get();
 		Assertions.assertEquals(1, list.size());
 
 		Assertions.assertEquals("garry", list.get(0).getName());
@@ -88,7 +97,57 @@ final class DynamoDbIndexesTest {
 		Assertions.assertEquals("barry", list.get(0).getGlobalLookup());
 		Assertions.assertEquals("barry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getGlobalLookup());
 	}
+	
+	
+	@TestDatabase
+	void testSecondaryUnique(final Database db) throws InterruptedException, ExecutionException {
 
+		var entry = db.querySecondaryUnique(SimpleTable.class, "garry").get();
+		Assertions.assertNull(entry);
+
+		
+		SimpleTable entry1 = new SimpleTable("garry", "john");
+		entry1 = db.put(entry1).get();
+
+		entry = db.querySecondaryUnique(SimpleTable.class, "garry").get();
+		Assertions.assertEquals("garry", entry.getName());
+		
+
+		SimpleTable entry2 = new SimpleTable("garry", "john");
+		db.put(entry2).get();
+
+
+		ExecutionException t = Assertions.assertThrows(ExecutionException.class, () -> db.querySecondaryUnique(SimpleTable.class, "garry").get());
+		Assertions.assertTrue(t.getCause().getMessage().contains("expected single linkage"));
+
+	}
+
+	@TestDatabase
+	void testGlobalUnique(final Database db) throws InterruptedException, ExecutionException {
+
+		var entry = db.queryGlobalUnique(SimpleTable.class, "john").get();
+		Assertions.assertNull(entry);
+
+		
+		SimpleTable entry1 = new SimpleTable("garry", "john");
+		entry1 = db.put(entry1).get();
+
+		entry = db.queryGlobalUnique(SimpleTable.class, "john").get();
+		Assertions.assertEquals("garry", entry.getName());
+		
+
+		SimpleTable entry2 = new SimpleTable("garry", "john");
+		db.put(entry2).get();
+
+
+		ExecutionException t = Assertions.assertThrows(ExecutionException.class, () -> db.queryGlobalUnique(SimpleTable.class, "john").get());
+		Assertions.assertTrue(t.getCause().getMessage().contains("expected single linkage"));
+
+	}
+	
+	//TODO:add test with multiple organisations for global and secondary indexes to confirm no funny business
+
+	
 	public static class SimpleTable extends Table {
 		private String name;
 		private String globalLookup;

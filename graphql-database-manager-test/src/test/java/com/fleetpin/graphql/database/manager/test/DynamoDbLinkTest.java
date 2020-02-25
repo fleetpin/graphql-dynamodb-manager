@@ -129,6 +129,7 @@ final class DynamoDbLinkTest {
 
 	}
 
+	//TODO: test link joining logic between global org and multiple databases
 
 	static class SimpleTable extends Table {
 		private String name;

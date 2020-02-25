@@ -1,6 +1,6 @@
 package com.fleetpin.graphql.database.manager;
 
-public final class KeyFactory {
+public interface KeyFactory {
     public static <T extends Table> DatabaseKey<T> createDatabaseKey(
             final String organisationId,
             final Class<T> type,
