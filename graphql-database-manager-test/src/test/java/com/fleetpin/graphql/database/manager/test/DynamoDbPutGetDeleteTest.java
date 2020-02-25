@@ -152,7 +152,7 @@ final class DynamoDbPutGetDeleteTest {
 	}
 
 	@TestDatabase
-	void testTwoOrganisationsPutGetDelete(final Database db, @DatabaseOrganisation("another-table") final Database db2) throws InterruptedException, ExecutionException {
+	void testTwoOrganisationsPutGetDelete(final Database db, @DatabaseOrganisation("org-777") final Database db2) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
