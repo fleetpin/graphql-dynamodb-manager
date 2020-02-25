@@ -28,6 +28,12 @@ import com.fleetpin.graphql.database.manager.DatabaseKey;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.memory.InMemoryDynamoDb;
+
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
@@ -84,6 +90,8 @@ final class DynamoDbInitializer {
 
     static DynamoDbAsyncClient startDynamoClient(final String port) throws URISyntaxException {
         return DynamoDbAsyncClient.builder()
+        		.region(Region.AWS_GLOBAL)
+        		.credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("anything", "anything")))
                 .endpointOverride(new URI("http://localhost:" + port))
                 .build();
     }
@@ -126,33 +134,33 @@ final class DynamoDbInitializer {
         return database;
     }
 
-    static Database getInMemoryDatabase(
-            final String organisationId,
-            final ConcurrentHashMap<DatabaseKey, Table> map,
-            final CompletableFuture<Object> future
-    ) {
-        final var objectMapper = new ObjectMapper()
-                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .registerModule(new ParameterNamesModule())
-                .registerModule(new Jdk8Module())
-                .registerModule(new JavaTimeModule())
-                .disable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .disable(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS)
-                .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
-                .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
-
-        final var factory = new JsonNodeFactory(false);
-
-        final Supplier<String> idGenerator = () -> UUID.randomUUID().toString();
-
-        final var database = DynamoDbManager.builder()
-                .tables("local")
-                .dynamoDb(new InMemoryDynamoDb(objectMapper, factory, map, idGenerator))
-                .build()
-                .getDatabase(organisationId);
-
-        database.start(future);
-        return database;
-    }
+//    static Database getInMemoryDatabase(
+//            final String organisationId,
+//            final ConcurrentHashMap<DatabaseKey, Table> map,
+//            final CompletableFuture<Object> future
+//    ) {
+//        final var objectMapper = new ObjectMapper()
+//                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+//                .registerModule(new ParameterNamesModule())
+//                .registerModule(new Jdk8Module())
+//                .registerModule(new JavaTimeModule())
+//                .disable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
+//                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+//                .disable(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS)
+//                .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
+//                .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+//
+//        final var factory = new JsonNodeFactory(false);
+//
+//        final Supplier<String> idGenerator = () -> UUID.randomUUID().toString();
+//
+//        final var database = DynamoDbManager.builder()
+//                .tables("local")
+//                .dynamoDb(new InMemoryDynamoDb(objectMapper, factory, map, idGenerator))
+//                .build()
+//                .getDatabase(organisationId);
+//
+//        database.start(future);
+//        return database;
+//    }
 }

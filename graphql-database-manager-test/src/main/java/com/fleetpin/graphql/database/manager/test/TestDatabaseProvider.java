@@ -53,7 +53,7 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 
         if (testMethod.getParameterCount() == 1) {
             return Stream.of(
-                    Arguments.of(getInMemoryDatabase(organisationIds[0], new ConcurrentHashMap<>(), finished)),
+//                    Arguments.of(getInMemoryDatabase(organisationIds[0], new ConcurrentHashMap<>(), finished)),
                     Arguments.of(getEmbeddedDatabase(organisationIds[0], client, finished))
             );
         } else {
@@ -83,11 +83,11 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
             );
         } else {
             params.add(
-                    Arguments.of(
-                            getInMemoryDatabase(organisationIds[0], map, finished),
-                            getInMemoryDatabase(organisationIds[1], map, finished)
-                    )
-            ).add(
+//                    Arguments.of(
+//                            getInMemoryDatabase(organisationIds[0], map, finished),
+//                            getInMemoryDatabase(organisationIds[1], map, finished)
+//                    )
+//            ).add(
                     Arguments.of(
                             getEmbeddedDatabase(organisationIds[0], async, finished),
                             getEmbeddedDatabase(organisationIds[1], async, finished)
