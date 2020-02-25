@@ -184,7 +184,13 @@ public final class DynamoDb extends DatabaseDriver {
 			});
 			var toReturn = new ArrayList<T>();
 			for(var key: keys) {
-				toReturn.add(flattener.get(key.getId()).convertTo(mapper, key.getType()));
+				
+				var item = flattener.get(key.getId());
+				if(item == null) {
+					toReturn.add(null);
+				}else {
+					toReturn.add(item.convertTo(mapper, key.getType()));
+				}
 			}
 			return toReturn;
 		});
@@ -292,7 +298,9 @@ public final class DynamoDb extends DatabaseDriver {
     				.expressionAttributeValues(keyConditions)
     				.projectionExpression("id")
     		).subscribe(response -> {
-    			response.items().stream().map(item -> item.get("id").s()).forEach(toReturn::add);
+    			response.items().stream().map(item -> item.get("id").s()).map(itemId -> {
+    				return itemId.substring(itemId.indexOf(':') + 1); //Id contains entity name
+    			}).forEach(toReturn::add);
     		}).thenApply(__ -> {
     			return toReturn;
     		});
