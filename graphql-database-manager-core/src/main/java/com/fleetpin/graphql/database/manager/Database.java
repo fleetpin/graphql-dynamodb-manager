@@ -83,7 +83,7 @@ public class Database {
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String id) {
-		return driver.querySecondary(type, organisationId, id)
+		return driver.querySecondary(type, organisationId, id, items)
 				.thenApply(items -> items.stream().map(item -> (T) item).collect(Collectors.toList()));
 	}
 	public <T extends Table> CompletableFuture<T> querySecondaryUnique(Class<T> type, String id) {

@@ -16,6 +16,7 @@ import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
+import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 
@@ -38,7 +39,7 @@ final class DynamoDbIndexesTest {
 	}
 
 	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	void testGlobalInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testGlobalInheritance(@DatabaseNames({"prod", "test"}) final Database db, @DatabaseNames({"prod"}) final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = dbProd.put(entry1).get();
 

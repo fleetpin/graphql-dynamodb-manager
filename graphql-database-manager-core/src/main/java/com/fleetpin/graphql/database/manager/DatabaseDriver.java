@@ -34,7 +34,7 @@ public abstract class DatabaseDriver {
 
     public abstract <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value);
 
-    public abstract <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String organisationId, String value);
+    public abstract <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String organisationId, String value, TableDataLoader<DatabaseKey<Table>> items);
 
     public abstract <T extends Table> CompletableFuture<T> link(String organisationId, T entry, Class<? extends Table> class1, List<String> groupIds);
 

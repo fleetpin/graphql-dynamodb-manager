@@ -20,9 +20,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.DatabaseDriver;
@@ -225,6 +227,7 @@ public final class DynamoDb extends DatabaseDriver {
 		
 	}
 	
+	@Override
 	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value) {
 		var id = AttributeValue.builder().s(table(type) + ":" + value).build();
 		
@@ -259,36 +262,37 @@ public final class DynamoDb extends DatabaseDriver {
 		});
 	}
 	@Override
-	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String organisationId, String value) {
+	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String organisationId, String value, TableDataLoader<DatabaseKey<Table>> item) {
 		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
 		var id = AttributeValue.builder().s(table(type) + ":" + value).build();
 		
-		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+		CompletableFuture<Set<String>> future = CompletableFuture.completedFuture(new HashSet<>());
 		for(var table: entityTables) {
 			future = future.thenCombine(querySecondary(table, organisationIdAttribute, id), (a, b) -> {
-				a.add(b);
+				a.addAll(b);
 				return a;
 			});
 		}
-		return future.thenApply(results -> {
-			var flattener = new Flatterner();
-			results.forEach(list -> flattener.addItems(list));
-			return flattener.results(mapper, type);
+		
+		return future.thenCompose(results -> {
+			List<DatabaseKey<Table>> keys = results.stream().map(i -> (DatabaseKey<Table>) createDatabaseKey(organisationId, type, i)).collect(Collectors.toList());
+			return item.loadMany(keys);
 		});
 		
 	}
-    private CompletableFuture<List<DynamoItem>> querySecondary(String table, AttributeValue organisationId, AttributeValue id) {
+    private CompletableFuture<List<String>> querySecondary(String table, AttributeValue organisationId, AttributeValue id) {
     		
     		Map<String, AttributeValue> keyConditions = new HashMap<>();
     		keyConditions.put(":organisationId", organisationId);
     		keyConditions.put(":secondaryOrganisation", id);
     
-    		var toReturn = new ArrayList<DynamoItem>();
+    		var toReturn = new ArrayList<String>();
     		return client.queryPaginator(r -> r.tableName(table).indexName("secondaryOrganisation")
     				.keyConditionExpression("organisationId = :organisationId AND secondaryOrganisation = :secondaryOrganisation")
     				.expressionAttributeValues(keyConditions)
+    				.projectionExpression("id")
     		).subscribe(response -> {
-    			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
+    			response.items().stream().map(item -> item.get("id").s()).forEach(toReturn::add);
     		}).thenApply(__ -> {
     			return toReturn;
     		});
