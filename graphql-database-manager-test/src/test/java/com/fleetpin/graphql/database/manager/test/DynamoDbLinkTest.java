@@ -14,6 +14,7 @@ package com.fleetpin.graphql.database.manager.test;
 
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 
@@ -22,8 +23,8 @@ import java.util.concurrent.ExecutionException;
 
 final class DynamoDbLinkTest {
 
-	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	void testSimpleQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	@TestDatabase
+	void testSimpleQuery(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames("prod") final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var john = db.put(new AnotherTable("john")).get();
 		var frank = dbProd.put(new SimpleTable("frank")).get();
@@ -47,8 +48,8 @@ final class DynamoDbLinkTest {
 		Assertions.assertEquals("frank", bobLinks.get(0).name);
 	}
 
-	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	void testDoubleLinkage(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	@TestDatabase
+	void testDoubleLinkage(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames("prod") final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = db.put(new SimpleTable("garry")).get();
 		var frank = dbProd.put(new SimpleTable("frank")).get();
 		var bob = dbProd.put(new AnotherTable("bob")).get();

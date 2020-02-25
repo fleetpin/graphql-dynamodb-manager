@@ -26,7 +26,5 @@ import java.lang.annotation.Target;
 @ParameterizedTest
 @ArgumentsSource(TestDatabaseProvider.class)
 public @interface TestDatabase {
-    boolean useProd() default false;
-
-    String[] organisationIds() default {"test"};
+    String organisationId() default "organisation";
 }

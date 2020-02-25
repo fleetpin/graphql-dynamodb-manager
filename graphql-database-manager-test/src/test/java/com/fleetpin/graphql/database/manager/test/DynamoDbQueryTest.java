@@ -14,6 +14,7 @@ package com.fleetpin.graphql.database.manager.test;
 
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 
@@ -93,8 +94,8 @@ final class DynamoDbQueryTest {
 	}
 
 
-	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	void testClimbingQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	@TestDatabase
+	void testClimbingQuery(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames({"prod"}) final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = dbProd.put(new SimpleTable("garry")).get();
 		var garryLocal = new SimpleTable("GARRY");
 		garryLocal.setId(garry.getId());
@@ -123,8 +124,8 @@ final class DynamoDbQueryTest {
 
 	}
 
-	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	void testClimbingGlobalQuery(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	@TestDatabase
+	void testClimbingGlobalQuery(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames("prod") final Database dbProd) throws InterruptedException, ExecutionException {
 		var garry = dbProd.put(new SimpleTable("garry")).get();
 		var garryLocal = new SimpleTable("GARRY");
 		garryLocal.setId(garry.getId());
@@ -141,7 +142,7 @@ final class DynamoDbQueryTest {
 		Assertions.assertEquals("bob", entries.get(1).name);
 		Assertions.assertEquals("frank", entries.get(2).name);
 
-		db.delete(entries.get(1), false);
+		db.delete(entries.get(1), false).get();
 
 		entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(2, entries.size());

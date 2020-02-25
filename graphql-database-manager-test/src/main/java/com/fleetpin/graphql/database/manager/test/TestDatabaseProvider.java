@@ -13,17 +13,22 @@
 package com.fleetpin.graphql.database.manager.test;
 
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
-import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.Table;
-import com.fleetpin.graphql.database.manager.dynamo.DynamoItem;
+import com.fleetpin.graphql.database.manager.Database;
+import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
+import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
+import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ArgumentsProvider;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 
+import java.lang.reflect.AnnotatedElement;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.fleetpin.graphql.database.manager.test.DynamoDbInitializer.*;
@@ -42,59 +47,27 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
         final var client = startDynamoClient(port);
 
         System.setProperty("sqlite4java.library.path", "native-libs");
-        createTable(client, "prod");
-        createTable(client, "stage");
 
         finished = new CompletableFuture<>();
 
         final var testMethod = extensionContext.getRequiredTestMethod();
-        final var testDatabase = testMethod.getAnnotation(TestDatabase.class);
-        final var organisationIds = testDatabase.organisationIds();
+        final var organisationId = testMethod.getAnnotation(TestDatabase.class).organisationId();
 
-        if (testMethod.getParameterCount() == 1) {
-            return Stream.of(
-//                    Arguments.of(getInMemoryDatabase(organisationIds[0], new ConcurrentHashMap<>(), finished)),
-                    Arguments.of(getEmbeddedDatabase(organisationIds[0], client, finished))
-            );
-        } else {
-            if (organisationIds.length < 2) {
-                throw new IllegalArgumentException("Not enough organisationIds were provided via @TestDatabase.");
-            }
+        final var argumentsList = Arrays.stream(testMethod.getParameters())
+                .map(parameter -> {
+                    try {
+                        if (parameter.getType().isAssignableFrom(DynamoDbManager.class)) {
+                            return createDynamoDbManager(client, parameter);
+                        } else {
+                            return createDatabase(client, parameter, organisationId);
+                        }
+                    } catch (final Exception e) {
+                        throw new ExceptionInInitializerError("Could not build parameters");
+                    }
+                })
+                .collect(Collectors.toList());
 
-            final var map = new ConcurrentHashMap<DatabaseKey, Table>();
-            return buildParameters(client, map, testDatabase, organisationIds);
-        }
-    }
-
-    private Stream<Arguments> buildParameters(
-            final DynamoDbAsyncClient async,
-            final ConcurrentHashMap<DatabaseKey, Table> map,
-            final TestDatabase testDatabase,
-            final String[] organisationIds
-    ) {
-        final Stream.Builder<Arguments> params = Stream.builder();
-
-        if (testDatabase.useProd()) {
-            params.add(
-                    Arguments.of(
-                            getEmbeddedDatabase(organisationIds[0], async, finished),
-                            getProductionDatabase(organisationIds[1], async, finished)
-                    )
-            );
-        } else {
-            params.add(
-//                    Arguments.of(
-//                            getInMemoryDatabase(organisationIds[0], map, finished),
-//                            getInMemoryDatabase(organisationIds[1], map, finished)
-//                    )
-//            ).add(
-                    Arguments.of(
-                            getEmbeddedDatabase(organisationIds[0], async, finished),
-                            getEmbeddedDatabase(organisationIds[1], async, finished)
-                    )
-            );
-        }
-        return params.build();
+        return Stream.of(gatherArguments(argumentsList));
     }
 
     private void closePreviousRun() throws Exception {
@@ -102,5 +75,41 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
             finished.complete(null);
             server.stop();
         }
+    }
+
+    private Database createDatabase(
+            final DynamoDbAsyncClient client,
+            final AnnotatedElement parameter,
+            final String organisationId
+    ) throws ExecutionException, InterruptedException {
+        final var databaseOrganisation = parameter.getAnnotation(DatabaseOrganisation.class);
+        final var correctOrganisationId = databaseOrganisation != null ? databaseOrganisation.value() : organisationId;
+
+        final var dynamoDbManager = createDynamoDbManager(client, parameter);
+
+        return getEmbeddedDatabase(dynamoDbManager, correctOrganisationId, finished);
+    }
+
+    private DynamoDbManager createDynamoDbManager(
+            final DynamoDbAsyncClient client,
+            final AnnotatedElement parameter
+    ) throws ExecutionException, InterruptedException {
+        final var databaseNames = parameter.getAnnotation(DatabaseNames.class);
+        var tables = databaseNames != null ? databaseNames.value() : new String[]{"table"};
+
+        for (final String table : tables) {
+            createTable(client, table);
+        }
+
+        return getDatabaseManager(client, tables);
+    }
+
+    private Arguments gatherArguments(final List<Object> argumentsList) {
+        final var argumentObjects = new Object[argumentsList.size()];
+        for (int i = 0; i < argumentObjects.length; i++) {
+            argumentObjects[i] = argumentsList.get(i);
+        }
+
+        return Arguments.of(argumentObjects);
     }
 }

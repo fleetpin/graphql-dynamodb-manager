@@ -42,8 +42,8 @@ final class DynamoDbIndexesTest {
 		Assertions.assertEquals("garry", db.queryGlobalUnique(SimpleTable.class, "john").get().getName());
 	}
 
-	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
-	void testGlobalInheritance(@DatabaseNames({"prod", "test"}) final Database db, @DatabaseNames({"prod"}) final Database dbProd) throws InterruptedException, ExecutionException {
+	@TestDatabase
+	void testGlobalInheritance(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames({"prod"}) final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = dbProd.put(entry1).get();
 
@@ -82,7 +82,7 @@ final class DynamoDbIndexesTest {
 		Assertions.assertEquals("garry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getName());
 	}
 
-	@TestDatabase(useProd = true, organisationIds = {"test", "test"})
+	@TestDatabase
 	void testSecondaryInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = dbProd.put(entry1).get();
