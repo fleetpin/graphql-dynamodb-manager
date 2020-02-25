@@ -76,11 +76,6 @@
             <artifactId>graphql-database-manager-dynamo</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.fleetpin</groupId>
-            <artifactId>graphql-database-manager-memory</artifactId>
-            <version>${project.parent.version}</version>
-        </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
