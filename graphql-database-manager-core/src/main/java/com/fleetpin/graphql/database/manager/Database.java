@@ -10,17 +10,15 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager.dynamo;
+package com.fleetpin.graphql.database.manager;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.*;
-import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
-import com.fleetpin.graphql.database.manager.access.ModificationPermission;
-import com.fleetpin.graphql.database.manager.util.DynamoDbUtil;
-import org.dataloader.DataLoader;
-import org.dataloader.DataLoaderOptions;
-
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -29,40 +27,47 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.dataloader.DataLoader;
+import org.dataloader.DataLoaderOptions;
+
+import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
+import com.fleetpin.graphql.database.manager.access.ModificationPermission;
+import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
+
+@SuppressWarnings("unchecked")
 public class Database {
 	private String organisationId;
-	private final DatabaseDriver dynamo;
+	private final DatabaseDriver driver;
 
-	private final ObjectMapper mapper;
-	
-	private final DataLoader<DatabaseKey, Table> items;
-	private final DataLoader<DatabaseQueryKey, List<Table>> queries;
+	private final TableDataLoader<DatabaseKey<Table>> items;
+	private final TableDataLoader<DatabaseQueryKey<Table>> queries;
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 	
-	Database(ObjectMapper mapper, String organisationId, DatabaseDriver dynamo, ModificationPermission putAllow) {
-		this.mapper = mapper;
+	Database(String organisationId, DatabaseDriver driver, ModificationPermission putAllow) {
 		this.organisationId = organisationId;
-		this.dynamo = dynamo;
+		this.driver = driver;
 		this.putAllow = putAllow;
 
-		items = new DataLoader<DatabaseKey, Table>(keys -> {
-			return dynamo.get(keys);
-		}, DataLoaderOptions.newOptions().setMaxBatchSize(dynamo.maxBatchSize())); // will auto call global
+		items = new TableDataLoader<>(new DataLoader<DatabaseKey<Table>, Table>(keys -> {
+			return driver.get(keys);
+		}, DataLoaderOptions.newOptions().setMaxBatchSize(driver.maxBatchSize()))); // will auto call global
 		
-		queries = new DataLoader<DatabaseQueryKey, List<Table>>(keys -> {
-			return merge(keys.stream().map(key -> dynamo.query(key)));
-		}, DataLoaderOptions.newOptions().setBatchingEnabled(false)); // will auto call global
+		queries = new TableDataLoader<>(new DataLoader<DatabaseQueryKey<Table>, List<Table>>(keys -> {
+			return merge(keys.stream().map(key -> driver.query(key)));
+		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
 	}
 
 
 	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type) {
-		return queries.load(KeyFactory.createDatabaseQueryKey(organisationId, type))
-				.thenApply(items -> items.stream().map(item -> (T) item).filter(Objects::nonNull).collect(Collectors.toList()));
+		DatabaseQueryKey<Table> key = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, type);
+		CompletableFuture<List<T>> toReturn = queries.load(key);
+		return toReturn
+				.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toList()));
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String id) {
-		return dynamo.queryGlobal(type, id)
+		return driver.queryGlobal(type, id)
 				.thenApply(items -> items.stream().map(item -> (T) item).collect(Collectors.toList()));
 	}
 	public <T extends Table> CompletableFuture<T> queryGlobalUnique(Class<T> type, String id) {
@@ -78,7 +83,7 @@ public class Database {
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String id) {
-		return dynamo.querySecondary(type, organisationId, id)
+		return driver.querySecondary(type, organisationId, id)
 				.thenApply(items -> items.stream().map(item -> (T) item).collect(Collectors.toList()));
 	}
 	public <T extends Table> CompletableFuture<T> querySecondaryUnique(Class<T> type, String id) {
@@ -96,7 +101,8 @@ public class Database {
 		if(id == null) {
 			return CompletableFuture.completedFuture(Optional.empty());
 		}
-		return items.load(KeyFactory.createDatabaseKey(organisationId, type, id)).thenApply(item -> {
+		DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, type, id);
+		return items.load(key).thenApply(item -> {
 			if(item == null) {
 				return Optional.empty();
 			}else {
@@ -106,7 +112,8 @@ public class Database {
 	}
 	
 	public <T extends Table> CompletableFuture<T> get(Class<T> type, String id) {
-		return items.load(KeyFactory.createDatabaseKey(organisationId, type, id)).thenApply(item -> {
+		DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, type, id);
+		return items.load(key).thenApply(item -> {
 		return (T) item;
 		});
 	}
@@ -119,26 +126,27 @@ public class Database {
 		}
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("Delete not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("Delete not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass()));
+			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
+    		items.clear(key);
+    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
+    		queries.clear(queryKey);
     		
     		if(deleteLinks) {
-    			return deleteLinks(entity).thenCompose(t -> dynamo.delete(organisationId, entity));
+    			return deleteLinks(entity).thenCompose(t -> driver.delete(organisationId, entity));
     		}
-    		
-    		return dynamo.delete(organisationId, entity);
+    		return driver.delete(organisationId, entity);
 		});
 	}
 
-	public <T extends Table> CompletableFuture<List<T>> getLinks(final T entry) {
-		return dynamo.getViaLinks(organisationId, entry, entry.getClass(), items)
+	public <T extends Table> CompletableFuture<List<T>> getLinks(final Table entry, Class<T> target) {
+		return driver.getViaLinks(organisationId, entry, target, items)
 			.thenApply(items -> items.stream().filter(Objects::nonNull).map(item -> (T) item).collect(Collectors.toList()));
 	}
 
-	public <T extends Table> CompletableFuture<T> getLink(final T entry) {
-		return getLinks(entry).thenApply(items -> {
+	public <T extends Table> CompletableFuture<T> getLink(final Table entry, Class<T> target) {
+		return getLinks(entry, target).thenApply(items -> {
 			if (items.size() > 1) {
 				throw new RuntimeException("Bad data"); // TODO: more info in failure
 			}
@@ -147,38 +155,42 @@ public class Database {
 
 	}
 	
-	public <T extends Table> CompletableFuture<Optional<T>> getLinkOptional(final T entry) {
-		return getLink(entry).thenApply(t -> Optional.ofNullable(t));
+	public <T extends Table> CompletableFuture<Optional<T>> getLinkOptional(final Table entry, Class<T> target) {
+		return getLink(entry, target).thenApply(t -> Optional.ofNullable(t));
 
 	}
 
 	public <T extends Table> CompletableFuture<T> deleteLinks(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("Delete links not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("Delete links not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-			return dynamo.deleteLinks(organisationId, entity).thenCompose(t -> put(entity));
+			return driver.deleteLinks(organisationId, entity).thenCompose(t -> put(entity));
 		});
 	}
 
 	public <T extends Table> CompletableFuture<T> put(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("put not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("put not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass()));
-    		return dynamo.put(organisationId, entity);
+			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
+    		items.clear(key);
+    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
+    		queries.clear(queryKey);
+    		return driver.put(organisationId, entity);
 		});
 	}
 	public <T extends Table> CompletableFuture<T> putGlobal(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("put global not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("put global not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(KeyFactory.createDatabaseKey("global", entity.getClass(), entity.getId()));
-    		queries.clear(KeyFactory.createDatabaseQueryKey("global", entity.getClass()));
-    		return dynamo.put("global", entity);
+			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
+    		items.clear(key);
+    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
+    		queries.clear(queryKey);
+    		return driver.put("global", entity);
 		});
 		
 	}
@@ -222,15 +234,20 @@ public class Database {
 	public <T extends Table> CompletableFuture<T> links(T entity, Class<? extends Table> class1, List<String> targetIds) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
-				throw new ForbiddenWriteException("Link not allowed for " + DynamoDbUtil.table(entity.getClass()) + " with id " + entity.getId());
+				throw new ForbiddenWriteException("Link not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-    		items.clear(KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
-    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass()));
+			
+			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
+    		items.clear(key);
+    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
+    		queries.clear(queryKey);
+    		
     		for(String id: targetIds) {
-    			items.clear(KeyFactory.createDatabaseKey(organisationId, class1, id));
+    			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, class1, id);
+        		items.clear(key);
     		}
-    		queries.clear(KeyFactory.createDatabaseQueryKey(organisationId, class1));
-    		return dynamo.link(organisationId, entity, class1, targetIds);
+    		queries.clear((DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, class1));
+    		return driver.link(organisationId, entity, class1, targetIds);
 		});
 	}
 
@@ -248,7 +265,7 @@ public class Database {
 		if(ids == null) {
 			return CompletableFuture.completedFuture(Collections.emptyList());
 		}
-		return TableUtil.all(ids.stream().map(id -> get(class1, id)).collect(Collectors.toList()));
+		return TableCoreUtil.all(ids.stream().map(id -> get(class1, id)).collect(Collectors.toList()));
 	}
 
 
@@ -262,12 +279,12 @@ public class Database {
 	}
 
 	public String newId() {
-		return dynamo.newId();
+		return driver.newId();
 	}
 
 
 	public Set<String> getLinkIds(Table entity, Class<? extends Table> type) {
-		return Collections.unmodifiableSet(TableAccess.getTableLinks(entity).get(DynamoDbUtil.table(type)));
+		return Collections.unmodifiableSet(TableAccess.getTableLinks(entity).get(TableCoreUtil.table(type)));
 	}
 	
 }

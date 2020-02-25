@@ -12,10 +12,10 @@
 
 package com.fleetpin.graphql.database.manager.test;
 
+import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
-import com.fleetpin.graphql.database.manager.dynamo.Database;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 

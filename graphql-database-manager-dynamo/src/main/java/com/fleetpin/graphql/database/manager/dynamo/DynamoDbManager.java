@@ -12,6 +12,13 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.function.Supplier;
+
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -21,37 +28,23 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.database.manager.DatabaseDriver;
+import com.fleetpin.graphql.database.manager.DatabaseManager;
 import com.fleetpin.graphql.database.manager.Table;
-import com.fleetpin.graphql.database.manager.access.ModificationPermission;
 import com.google.common.base.Preconditions;
+
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
-
-public final class DynamoDbManager {
+public final class DynamoDbManager extends DatabaseManager {
 	private final ObjectMapper mapper;
 	private final Supplier<String> idGenerator;
-	private final DatabaseDriver dynamoDb;
 	private final DynamoDbAsyncClient client;
 	
 	private DynamoDbManager(ObjectMapper mapper, Supplier<String> idGenerator, DynamoDbAsyncClient client, DatabaseDriver dynamoDb) {
-		super();
+		super(dynamoDb);
 		this.mapper = mapper;
 		this.idGenerator = idGenerator;
-		this.dynamoDb = dynamoDb;
 		this.client = client;
-	}
-	
-	public Database getDatabase(String organisationId) {
-		return getDatabase(organisationId, __ -> CompletableFuture.completedFuture(true));
-	}
-	
-	
-	public Database getDatabase(String organisationId, ModificationPermission putAllow) {
-		return new Database(mapper, organisationId, dynamoDb, putAllow);
 	}
 	
 	
@@ -134,14 +127,14 @@ public final class DynamoDbManager {
 	}
 	
 	public <T> T convertTo(Map<String, AttributeValue> item, Class<T> type) {
-		return attributeValuesTo(mapper, item, type);
+		return TableUtil.convertTo(mapper, item, type);
 	}
 	public <T> T convertTo(AttributeValue item, Class<T> type) {
-		return attributeValueTo(mapper, item, type);
+		return TableUtil.convertTo(mapper, item, type);
 	}
 
 	public AttributeValue toAttributes(Object entity) {
-		return entityToAttributes(mapper, (Table) entity);
+		return TableUtil.toAttributes(mapper, (Table) entity);
 	}	
 	
 	

@@ -14,12 +14,12 @@ package com.fleetpin.graphql.database.manager;
 
 import java.util.Objects;
 
-public class DatabaseQueryKey {
+public class DatabaseQueryKey<T extends Table> {
 
 	private final String organisationId;
-	private final Class<? extends Table> type;
+	private final Class<T> type;
 
-	DatabaseQueryKey(String organisationId, Class<? extends Table> type) {
+	DatabaseQueryKey(String organisationId, Class<T> type) {
 		super();
 		this.organisationId = organisationId;
 		this.type = type;
@@ -29,7 +29,7 @@ public class DatabaseQueryKey {
 		return organisationId;
 	}
 
-	public Class<? extends Table> getType() {
+	public Class<T> getType() {
 		return type;
 	}
 

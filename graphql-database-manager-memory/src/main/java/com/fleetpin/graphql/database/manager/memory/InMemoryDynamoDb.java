@@ -15,9 +15,16 @@ package com.fleetpin.graphql.database.manager.memory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.*;
 import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.dynamo.Flatterner;
+import com.google.common.collect.Multimap;
+
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
+
 import org.dataloader.DataLoader;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,24 +36,26 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.fleetpin.graphql.database.manager.util.DynamoDbUtil.table;
+import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 public final class InMemoryDynamoDb extends DatabaseDriver {
     private static final String SECONDARY_GLOBAL = "secondaryGlobal";
     private static final String SECONDARY_ORGANISATION = "secondaryOrganisation";
     private final ObjectMapper objectMapper;
     private final JsonNodeFactory factory;
-    private final ConcurrentHashMap<DatabaseKey, Table> map;
+    private final List<ConcurrentHashMap<DatabaseKey, MemoryItem>> tables;
+    private final ConcurrentHashMap<DatabaseKey, MemoryItem> entityTable;
     private final Supplier<String> idGenerator;
 
     public InMemoryDynamoDb(
             final ObjectMapper objectMapper,
             final JsonNodeFactory factory,
-            final ConcurrentHashMap<DatabaseKey, Table> map,
+            final List<ConcurrentHashMap<DatabaseKey, MemoryItem>> tables,
             final Supplier<String> idGenerator
     ) {
         this.objectMapper = objectMapper;
         this.factory = factory;
-        this.map = map;
+        this.tables = tables;
         this.idGenerator = idGenerator;
     }
 
@@ -56,9 +65,13 @@ public final class InMemoryDynamoDb extends DatabaseDriver {
             if (!organisationId.equals(getSourceOrganistaionId(entity))) {
                 return entity;
             }
-
-            map.remove(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
-
+            
+    		String sourceTable = getSourceTable(entity);
+    		if(sourceTable.equals(entityTable)) {
+                entityTable.remove(createDatabaseKey(organisationId, entity.getClass(), entity.getId()));
+    		}else {
+                entityTable.put(createDatabaseKey(organisationId, entity.getClass(), entity.getId()), MemoryItem.deleted());
+    		}
             return entity;
         });
     }
@@ -67,12 +80,10 @@ public final class InMemoryDynamoDb extends DatabaseDriver {
     public <T extends Table> CompletableFuture<T> deleteLinks(final String organisationId, final T entity) {
         return CompletableFuture.supplyAsync(() -> {
             final var databaseKey = createDatabaseKey(organisationId, entity.getClass(), entity.getId());
-            final var item = map.get(databaseKey);
-
-            map.forEach((key, value) -> getLinks(value).get(table(entity.getClass())).clear());
-            getLinks(item).clear();
-
-            getLinks(entity).clear();
+            final var item = entityTable.get(databaseKey);
+            item.deleteLinks();
+            //be more efficient and remove links that are marked above instead of finding all reverse links
+            entityTable.forEach((key, value) -> value.deleteLinksTo(item));
             return entity;
         });
     }
@@ -87,37 +98,78 @@ public final class InMemoryDynamoDb extends DatabaseDriver {
 
             setUpdatedAt(entity, Instant.now());
 
+            
             final var links = factory.objectNode();
             getLinks(entity).entries().forEach(entry -> {
                 links.put(entry.getKey(), entry.getValue());
             });
-
-            final var item = new HashMap<String, BaseJsonNode>();
-            item.put("organisationId", factory.textNode(organisationId));
-            item.put("id", createTableNamedKey(entity.getClass(), entity.getId()));
-            item.put("item", toAttributes(objectMapper, entity));
-            item.put("links", links);
-            appendSecondaryItemFields(entity, item);
-
+            //may want copy so db state is constant is it possible?
+            final var item = new MemoryItem(getLinks(entity), entity);
             final var databaseKey = createDatabaseKey(organisationId, entity.getClass(), entity.getId());
-            final var dynamoItem = createDynamoItem(getSourceTable(entity), item);
-
-            map.put(databaseKey, dynamoItem);
-
+            entityTable.put(databaseKey, item);
             return entity;
         });
     }
+    
+    private MemoryItem itemMerger(MemoryItem first, MemoryItem second) {
+    	return second; //actually merge
+    }
 
+    private static class MergeKey {
+    	private final Class<?> type;
+    	private final String id;
+		public MergeKey(DatabaseKey<?> key) {
+			this.type = key.getType();
+			this.id = key.getId();
+		}
+		@Override
+		public int hashCode() {
+			return Objects.hash(id, type);
+		}
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			MergeKey other = (MergeKey) obj;
+			return Objects.equals(id, other.id) && Objects.equals(type, other.type);
+		}
+		
+		
+    	
+    	
+    }
     @Override
-    public <T extends Table> CompletableFuture<List<T>> get(final List<DatabaseKey> keys) {
-        return CompletableFuture.supplyAsync(() -> keys.stream()
-                .map(key -> map.entrySet()
-                        .stream()
-                        .filter(entry -> foundInMap(entry, key))
-                        .findFirst()
-                        .map(Map.Entry::getValue)
-                        .orElse(null))
-                .collect(Collectors.toList()));
+    public <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys) {
+    	
+    	Map<MergeKey, MemoryItem> items = new HashMap<>();
+
+    	for(var map: tables) {
+    		for(var key: keys) {
+    			var item = map.get(createDatabaseKey("global", key.getType(), key.getId()));
+    			items.merge(new MergeKey(key), item, this::itemMerger);
+    		}
+    	}
+    	for(var map: tables) {
+    		for(var key: keys) {
+    			var item = map.get(key);
+    			items.merge(new MergeKey(key), item, this::itemMerger);
+    		}
+    	}
+    	
+    	List<T> toReturn = new ArrayList<>(keys.size());
+    	for(var key: keys) {
+    		var item = items.get(new MergeKey(key));
+    		if(item != null && !item.isDeleted()) {
+    			toReturn.add(item.getEntity());
+    		}else {
+    			toReturn.add(null);
+    		}
+    	}
+    	return CompletableFuture.completedFuture(toReturn);
     }
 
     @Override

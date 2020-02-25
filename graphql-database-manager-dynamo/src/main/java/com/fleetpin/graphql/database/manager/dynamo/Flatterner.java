@@ -17,13 +17,16 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Table;
+
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public final class Flatterner {
 
-	private final Map<String, Table> lookup;
+	private final Map<String, DynamoItem> lookup;
 	
 	
 	Flatterner() {
@@ -31,9 +34,9 @@ public final class Flatterner {
 	}
 	
 	
-	public <T extends Table> void add(String table, List<Map<String, AttributeValue>> list) {
+	public void add(String table, List<Map<String, AttributeValue>> list) {
 		list.forEach(item -> {
-			var i = new T(table, item);
+			var i = new DynamoItem(table, item);
 			if(i.isDeleted()) {
 				lookup.remove(i.getId());
 			}else {
@@ -44,12 +47,12 @@ public final class Flatterner {
 	}
 
 
-	public <T extends Table> T get(String id) {
-		return (T) lookup.get(id);
+	public DynamoItem get(String id) {
+		return lookup.get(id);
 	}
 
 
-	public <T extends Table> void addItems(List<T> list) {
+	public void addItems(List<DynamoItem> list) {
 		list.forEach(item -> {
 			if(item.isDeleted()) {
 				lookup.remove(item.getId());
@@ -60,23 +63,23 @@ public final class Flatterner {
 		
 	}
 	
-	public <T extends Table> T merge(T existing, T replace) {
+	public DynamoItem merge(DynamoItem existing, DynamoItem replace) {
 		var item = new HashMap<>(replace.getItem());
 		//only links in parent
 		if(item.get("item") == null) {
 			item.put("item", existing.getItem().get("item"));
 		}
-		var toReturn = new T(replace.getTable(), item);
+		var toReturn = new DynamoItem(replace.getTable(), item);
 		toReturn.getLinks().putAll(existing.getLinks());
 
 		return toReturn;
 	}
 
 
-	public <T extends Table> List<T> results() {
-		var items = new ArrayList<T>(lookup.values());
+	public <T extends Table> List<T> results(ObjectMapper mapper, Class<T> type) {
+		var items = new ArrayList<DynamoItem>(lookup.values());
 		Collections.sort(items);
-		return items;
+		return items.stream().map(t -> t.convertTo(mapper, type)).collect(Collectors.toList());
 	}
 
 }

@@ -12,21 +12,29 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.*;
-import org.dataloader.DataLoader;
-import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
-import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
-import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
+import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.fleetpin.graphql.database.manager.util.DynamoDbUtil.table;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.database.manager.DatabaseDriver;
+import com.fleetpin.graphql.database.manager.DatabaseKey;
+import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
+import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.TableDataLoader;
+
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
 
 public final class DynamoDb extends DatabaseDriver {
 	private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
@@ -140,7 +148,8 @@ public final class DynamoDb extends DatabaseDriver {
 	}
 
 
-	public <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey> keys) {
+	@Override
+	public <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys) {
 		List<Map<String, AttributeValue>> entries = new ArrayList<>(keys.size() * 2);
 
 		keys.forEach(key -> {
@@ -173,31 +182,35 @@ public final class DynamoDb extends DatabaseDriver {
 			});
 			var toReturn = new ArrayList<T>();
 			for(var key: keys) {
-				toReturn.add(flattener.get(key.getId()));
+				toReturn.add(flattener.get(key.getId()).convertTo(mapper, key.getType()));
 			}
 			return toReturn;
 		});
 	}
 	
-	
 	@Override
-	public <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<? extends Table> type, DataLoader<DatabaseKey, T> items) {
+	public <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items) {
 		String tableTarget = table(type);
 		var links = getLinks(entry).get(tableTarget);
-		var keys = links.stream().map(link -> createDatabaseKey(organisationId, type, link)).collect(Collectors.toList());
+		Class<Table> query = (Class<Table>) type;
+		List<DatabaseKey<Table>> keys = links.stream().map(link -> createDatabaseKey(organisationId, query, link)).collect(Collectors.toList());
 		return items.loadMany(keys);
 	}
 
-	public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey key) {
+	@Override
+	public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key) {
 		var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
 		var id = AttributeValue.builder().s(table(key.getType()) + ":").build();
 		
-		CompletableFuture<List<List<T>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
 			future = future.thenCombine(query(table, GLOBAL, id), (a, b) -> {
 				a.add(b);
 				return a;
 			});
+		}
+		
+		for(var table: entityTables) {
 			future = future.thenCombine(query(table, organisationId, id), (a, b) -> {
 				a.add(b);
 				return a;
@@ -207,15 +220,15 @@ public final class DynamoDb extends DatabaseDriver {
 		return future.thenApply(results -> {
 			var flattener = new Flatterner();
 			results.forEach(list -> flattener.addItems(list));
-			return flattener.results();
+			return flattener.results(mapper, key.getType());
 		});
 		
 	}
 	
-	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<? extends Table> type, String value) {
+	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value) {
 		var id = AttributeValue.builder().s(table(type) + ":" + value).build();
 		
-		CompletableFuture<List<List<T>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
 			future = future.thenCombine(queryGlobal(table, id), (a, b) -> {
 				a.add(b);
@@ -225,32 +238,32 @@ public final class DynamoDb extends DatabaseDriver {
 		return future.thenApply(results -> {
 			var flattener = new Flatterner();
 			results.forEach(list -> flattener.addItems(list));
-			return flattener.results();
+			return flattener.results(mapper, type);
 		});
 		
 	}
 	
-	private <T extends Table> CompletableFuture<List<T>> queryGlobal(String table, AttributeValue id) {
+	private CompletableFuture<List<DynamoItem>> queryGlobal(String table, AttributeValue id) {
 		
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
 		keyConditions.put(":secondaryGlobal", id);
 
-		var toReturn = new ArrayList<T>();
+		var toReturn = new ArrayList<DynamoItem>();
 		return client.queryPaginator(r -> r.tableName(table).indexName("secondaryGlobal")
 				.keyConditionExpression("secondaryGlobal = :secondaryGlobal")
 				.expressionAttributeValues(keyConditions)
 		).subscribe(response -> {
-			response.items().forEach(item -> toReturn.add(table));
+			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
 		}).thenApply(__ -> {
 			return toReturn;
 		});
 	}
 	@Override
-	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<? extends Table> type, String organisationId, String value) {
+	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String organisationId, String value) {
 		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
 		var id = AttributeValue.builder().s(table(type) + ":" + value).build();
 		
-		CompletableFuture<List<List<T>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
 			future = future.thenCombine(querySecondary(table, organisationIdAttribute, id), (a, b) -> {
 				a.add(b);
@@ -260,7 +273,7 @@ public final class DynamoDb extends DatabaseDriver {
 		return future.thenApply(results -> {
 			var flattener = new Flatterner();
 			results.forEach(list -> flattener.addItems(list));
-			return flattener.results();
+			return flattener.results(mapper, type);
 		});
 		
 	}
@@ -281,13 +294,13 @@ public final class DynamoDb extends DatabaseDriver {
     		});
     	}
 	
-	private <T extends Table> CompletableFuture<List<T>> query(String table, AttributeValue organisationId, AttributeValue id) {
+	private CompletableFuture<List<DynamoItem>> query(String table, AttributeValue organisationId, AttributeValue id) {
 		
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
 		keyConditions.put(":organisationId", organisationId);
 		keyConditions.put(":table", id);
 
-		var toReturn = new ArrayList<T>();
+		var toReturn = new ArrayList<DynamoItem>();
 		return client.queryPaginator(r -> r.tableName(table)
 				.consistentRead(true)
 				.keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
@@ -450,4 +463,5 @@ public final class DynamoDb extends DatabaseDriver {
 	public String newId() {
 		return idGenerator.get();
 	}
+
 }
