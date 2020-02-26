@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.fleetpin</groupId>
         <artifactId>graphql-database-manager</artifactId>
-        <version>0.2.0</version>
+        <version>0.2.2</version>
     </parent>
 
     <artifactId>graphql-database-manager-test</artifactId>
@@ -75,6 +75,12 @@
             <groupId>com.fleetpin</groupId>
             <artifactId>graphql-database-manager-dynamo</artifactId>
             <version>${project.parent.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>DynamoDBLocal</artifactId>
+            <version>1.11.477</version>
         </dependency>
 
         <dependency>

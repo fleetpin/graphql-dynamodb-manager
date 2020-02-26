@@ -134,7 +134,7 @@ public final class DynamoDbManager extends DatabaseManager {
 	}
 
 	public AttributeValue toAttributes(Object entity) {
-		return TableUtil.toAttributes(mapper, (Table) entity);
+		return TableUtil.toAttributes(mapper, entity);
 	}	
 	
 	
