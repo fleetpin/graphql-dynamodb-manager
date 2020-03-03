@@ -178,7 +178,7 @@ public final class DynamoDb extends DatabaseDriver {
 		return client.batchGetItem(builder -> builder.requestItems(items)).thenApply(response -> {
 			var responseItems = response.responses();
 
-			var flattener = new Flatterner();
+			var flattener = new Flatterner(false);
 			entityTables.forEach(table -> {
 				flattener.add(table, responseItems.get(table));
 			});
@@ -226,7 +226,7 @@ public final class DynamoDb extends DatabaseDriver {
 		}
 		
 		return future.thenApply(results -> {
-			var flattener = new Flatterner();
+			var flattener = new Flatterner(false);
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results(mapper, key.getType());
 		});
@@ -245,7 +245,7 @@ public final class DynamoDb extends DatabaseDriver {
 			});
 		}
 		return future.thenApply(results -> {
-			var flattener = new Flatterner();
+			var flattener = new Flatterner(true);
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results(mapper, type);
 		});

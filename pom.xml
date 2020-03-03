@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.fleetpin</groupId>
     <artifactId>graphql-database-manager</artifactId>
-    <version>0.2.2</version>
+    <version>0.2.3</version>
     <name>GraphQL Builder</name>
     <description>library to make working with dynamodb and graphql easy</description>
     <url>https://github.com/fleetpin/graphql-dynamodb-manager</url>

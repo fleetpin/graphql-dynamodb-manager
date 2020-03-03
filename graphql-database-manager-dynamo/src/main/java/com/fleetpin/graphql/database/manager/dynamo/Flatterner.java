@@ -27,10 +27,11 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 public final class Flatterner {
 
 	private final Map<String, DynamoItem> lookup;
+	private final boolean includeOrganisationId;
 	
-	
-	Flatterner() {
+	Flatterner(boolean includeOrganisationId) {
 		lookup = new HashMap<>();
+		this.includeOrganisationId = includeOrganisationId;
 	}
 	
 	
@@ -38,14 +39,21 @@ public final class Flatterner {
 		list.forEach(item -> {
 			var i = new DynamoItem(table, item);
 			if(i.isDeleted()) {
-				lookup.remove(i.getId());
+				lookup.remove(getId(i));
 			}else {
-				lookup.merge(i.getId(), i, this::merge);
+				lookup.merge(getId(i), i, this::merge);
 			}
 		});
 		
 	}
 
+	private String getId(DynamoItem item) {
+		if(includeOrganisationId) {
+			return item.getOrganisationId() + ":" + item.getId();
+		}else {
+			return item.getId();
+		}
+	}
 
 	public DynamoItem get(String id) {
 		return lookup.get(id);
@@ -55,9 +63,9 @@ public final class Flatterner {
 	public void addItems(List<DynamoItem> list) {
 		list.forEach(item -> {
 			if(item.isDeleted()) {
-				lookup.remove(item.getId());
+				lookup.remove(getId(item));
 			}else {
-				lookup.merge(item.getId(), item, this::merge);
+				lookup.merge(getId(item), item, this::merge);
 			}
 		});
 		

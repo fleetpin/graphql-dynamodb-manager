@@ -29,6 +29,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 	private final String id;
 
 	private final HashMultimap<String, String> links;
+	private String organisationId;
 
 	DynamoItem(String table, Map<String, AttributeValue> item) {
 		this.table = table;
@@ -44,6 +45,10 @@ public class DynamoItem implements Comparable<DynamoItem>{
 		}
 		String id = item.get("id").s();
 		this.id = id.substring(id.indexOf(':') + 1);
+		
+		String organisationId = item.get("organisationId").s();
+		this.organisationId = organisationId.substring(id.indexOf(':') + 1);
+
 
 	}
 
@@ -94,6 +99,10 @@ public class DynamoItem implements Comparable<DynamoItem>{
 			return null;
 		}
 		return attribute.s();
+	}
+	
+	public String getOrganisationId() {
+		return organisationId;
 	}
 
 
