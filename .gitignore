@@ -1,5 +1,7 @@
-/.classpath
-/.project
-/.settings
+.classpath
+.project
+.settings
 target
-/native-libs
+native-libs
+.idea
+*.iml
