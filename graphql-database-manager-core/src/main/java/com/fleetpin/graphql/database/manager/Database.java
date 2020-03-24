@@ -42,12 +42,14 @@ public class Database {
 	private final TableDataLoader<DatabaseKey<Table>> items;
 	private final TableDataLoader<DatabaseQueryKey<Table>> queries;
 
+	private final QueryBuilderFactory queryBuilderFactory;
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 	
-	Database(String organisationId, DatabaseDriver driver, ModificationPermission putAllow) {
+	Database(String organisationId, DatabaseDriver driver, ModificationPermission putAllow, QueryBuilderFactory factory) {
 		this.organisationId = organisationId;
 		this.driver = driver;
 		this.putAllow = putAllow;
+		this.queryBuilderFactory = factory;
 
 		items = new TableDataLoader<>(new DataLoader<DatabaseKey<Table>, Table>(keys -> {
 			return driver.get(keys);
@@ -58,6 +60,13 @@ public class Database {
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
 	}
 
+	public <T extends Table> CompletableFuture<List<T>> query(Function<QueryBuilder<T>, QueryBuilder<T>> func) {
+		return query(func.apply(queryBuilderFactory.getBuilder()));
+	}
+
+	public <T extends Table> CompletableFuture<List<T>> query(QueryBuilder<T> builder) {
+		return builder.exec();
+	}
 
 	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type) {
 		DatabaseQueryKey<Table> key = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, type);
