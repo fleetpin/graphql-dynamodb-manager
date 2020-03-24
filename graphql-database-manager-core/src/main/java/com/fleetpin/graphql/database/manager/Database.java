@@ -60,8 +60,8 @@ public class Database {
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
 	}
 
-	public <T extends Table> CompletableFuture<List<T>> query(Function<QueryBuilder<T>, QueryBuilder<T>> func) {
-		return query(func.apply(queryBuilderFactory.getBuilder()));
+	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type, Function<QueryBuilder<T>, QueryBuilder<T>> func) {
+		return query(func.apply(queryBuilderFactory.getBuilder(type)));
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> query(QueryBuilder<T> builder) {

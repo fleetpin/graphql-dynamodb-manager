@@ -27,11 +27,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.DatabaseDriver;
-import com.fleetpin.graphql.database.manager.DatabaseKey;
-import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
-import com.fleetpin.graphql.database.manager.Table;
-import com.fleetpin.graphql.database.manager.TableDataLoader;
+import com.fleetpin.graphql.database.manager.*;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -90,10 +86,7 @@ public final class DynamoDb extends DatabaseDriver {
 			return client.putItem(request -> request.tableName(entityTable).item(item)).thenApply(response -> {
 				return entity;
 			});
-			
-			
 		}
-		
 	}
 
 	public <T extends Table> CompletableFuture<T> put(String organisationId, T entity) {
@@ -121,7 +114,6 @@ public final class DynamoDb extends DatabaseDriver {
 			}
 		});
 
-		
 		item.put("links", AttributeValue.builder().m(links).build());
 		setSource(entity, entityTable, getLinks(entity), organisationId);
 
@@ -195,7 +187,12 @@ public final class DynamoDb extends DatabaseDriver {
 			return toReturn;
 		});
 	}
-	
+
+	@Override
+	public QueryBuilderFactory getQueryBuilderFactory(String organisationId) {
+		return new DynamoDbQueryBuilderFactory(organisationId, client, mapper);
+	}
+
 	@Override
 	public <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items) {
 		String tableTarget = table(type);
