@@ -30,6 +30,14 @@ final class DynamoDbQueryBuilderTest {
 			this.id = id;
 			this.value = value;
 		}
+
+		@Override
+		public String toString() {
+			return "Ticket{" +
+					"id='" + id + '\'' +
+					", value='" + value + '\'' +
+					'}';
+		}
 	}
 
 	@TestDatabase
