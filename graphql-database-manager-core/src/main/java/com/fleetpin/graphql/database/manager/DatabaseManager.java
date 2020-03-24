@@ -21,7 +21,7 @@ public abstract class DatabaseManager {
 	
 	
 	public Database getDatabase(String organisationId, ModificationPermission putAllow) {
-		return new Database(organisationId, dynamoDb, putAllow, dynamoDb.getQueryBuilderFactory(organisationId));
+		return new Database(organisationId, dynamoDb, putAllow);
 	}
 	
 }

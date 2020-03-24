@@ -14,11 +14,9 @@ package com.fleetpin.graphql.database.manager.test;
 
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
-import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 
-import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 
 final class DynamoDbQueryBuilderTest {
@@ -46,10 +44,10 @@ final class DynamoDbQueryBuilderTest {
 		db.put(new Ticket("budgetId1:456", "456")).get();
 		db.put(new Ticket("budgetId2:123", "123")).get();
 
-		var result = db.query(Ticket.class, builder -> builder.on(Ticket.class));
+		var result = db.query(Ticket.class, builder -> builder);
 		Assertions.assertEquals(3, result.get().size());
 
-		Assertions.assertEquals(2, db.query(Ticket.class, builder -> builder.on(Ticket.class).limit(2)).get().size());
+		Assertions.assertEquals(2, db.query(Ticket.class, builder -> builder.limit(2)).get().size());
 	}
 
 }

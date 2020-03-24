@@ -20,11 +20,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.*;
@@ -189,11 +189,6 @@ public final class DynamoDb extends DatabaseDriver {
 	}
 
 	@Override
-	public QueryBuilderFactory getQueryBuilderFactory(String organisationId) {
-		return new DynamoDbQueryBuilderFactory(organisationId, client, mapper);
-	}
-
-	@Override
 	public <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items) {
 		String tableTarget = table(type);
 		var links = getLinks(entry).get(tableTarget);
@@ -205,18 +200,19 @@ public final class DynamoDb extends DatabaseDriver {
 	@Override
 	public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key) {
 		var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
-		var id = AttributeValue.builder().s(table(key.getType()) + ":").build();
+		String prefix = Optional.ofNullable(key.getQuery().getStartsWith()).orElse("");
+		var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
 		
 		CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		for(var table: entityTables) {
-			future = future.thenCombine(query(table, GLOBAL, id), (a, b) -> {
+			future = future.thenCombine(query(table, GLOBAL, id, key.getQuery()), (a, b) -> {
 				a.add(b);
 				return a;
 			});
 		}
 		
 		for(var table: entityTables) {
-			future = future.thenCombine(query(table, organisationId, id), (a, b) -> {
+			future = future.thenCombine(query(table, organisationId, id, key.getQuery()), (a, b) -> {
 				a.add(b);
 				return a;
 			});
@@ -225,7 +221,7 @@ public final class DynamoDb extends DatabaseDriver {
 		return future.thenApply(results -> {
 			var flattener = new Flatterner(false);
 			results.forEach(list -> flattener.addItems(list));
-			return flattener.results(mapper, key.getType());
+			return flattener.results(mapper, key.getQuery().getType());
 		});
 		
 	}
@@ -303,17 +299,32 @@ public final class DynamoDb extends DatabaseDriver {
     		});
     	}
 	
-	private CompletableFuture<List<DynamoItem>> query(String table, AttributeValue organisationId, AttributeValue id) {
+	private CompletableFuture<List<DynamoItem>> query(String table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
 		
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
 		keyConditions.put(":organisationId", organisationId);
 		keyConditions.put(":table", id);
+		if(query.getUntil() != null) {
+			throw new RuntimeException("until not implemented in dynamodb query");
+		}
 
+		
 		var toReturn = new ArrayList<DynamoItem>();
 		return client.queryPaginator(r -> r.tableName(table)
 				.consistentRead(true)
 				.keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
 				.expressionAttributeValues(keyConditions)
+				.applyMutation(b -> {
+					if(query.getLimit() != null) {
+						b.limit(query.getLimit());
+					}
+					if(query.getFrom() != null) {
+						//TODO: needs to include organisationId as well in this map I think plus will include this key need to change query signature to be able to support this.
+						b.exclusiveStartKey(Map.of("id", AttributeValue.builder().s(query.getFrom()).build()));
+						
+					}
+
+				})
 		).subscribe(response -> {
 			response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
 		}).thenApply(__ -> {

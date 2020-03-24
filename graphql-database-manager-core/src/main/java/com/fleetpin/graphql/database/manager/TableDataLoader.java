@@ -24,7 +24,10 @@ public class TableDataLoader<K> {
 
 	public void clear(K key) {
 		loader.clear(key);
-		
+	}
+	
+	public void clearAll() {
+		loader.clearAll();
 	}
 
 	public int dispatchDepth() {

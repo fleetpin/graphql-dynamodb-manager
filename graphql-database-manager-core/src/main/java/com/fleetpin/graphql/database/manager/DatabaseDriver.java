@@ -28,8 +28,6 @@ public abstract class DatabaseDriver {
 
     public abstract <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys);
 
-    public abstract QueryBuilderFactory getQueryBuilderFactory(String organisationId);
-
     public abstract <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items);
 
     public abstract <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key);

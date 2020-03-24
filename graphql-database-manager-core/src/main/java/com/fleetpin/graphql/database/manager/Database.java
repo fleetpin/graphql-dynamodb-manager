@@ -42,14 +42,12 @@ public class Database {
 	private final TableDataLoader<DatabaseKey<Table>> items;
 	private final TableDataLoader<DatabaseQueryKey<Table>> queries;
 
-	private final QueryBuilderFactory queryBuilderFactory;
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 	
-	Database(String organisationId, DatabaseDriver driver, ModificationPermission putAllow, QueryBuilderFactory factory) {
+	Database(String organisationId, DatabaseDriver driver, ModificationPermission putAllow) {
 		this.organisationId = organisationId;
 		this.driver = driver;
 		this.putAllow = putAllow;
-		this.queryBuilderFactory = factory;
 
 		items = new TableDataLoader<>(new DataLoader<DatabaseKey<Table>, Table>(keys -> {
 			return driver.get(keys);
@@ -61,18 +59,19 @@ public class Database {
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type, Function<QueryBuilder<T>, QueryBuilder<T>> func) {
-		return query(func.apply(queryBuilderFactory.getBuilder(type)));
+		return query(func.apply(QueryBuilder.create(type)).build());
 	}
 
-	public <T extends Table> CompletableFuture<List<T>> query(QueryBuilder<T> builder) {
-		return builder.exec();
-	}
-
-	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type) {
-		DatabaseQueryKey<Table> key = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, type);
+	static class test123 extends Table{}
+	public <T extends Table> CompletableFuture<List<T>> query(Query<T> query) {
+		DatabaseQueryKey<Table> key = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, query);
 		CompletableFuture<List<T>> toReturn = queries.load(key);
 		return toReturn
 				.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toList()));
+	}
+
+	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type) {
+		return query(QueryBuilder.create(type).build());
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String id) {
@@ -139,8 +138,7 @@ public class Database {
 			}
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
-    		queries.clear(queryKey);
+    		queries.clearAll();
     		
     		if(deleteLinks) {
     			return deleteLinks(entity).thenCompose(t -> driver.delete(organisationId, entity));
@@ -185,8 +183,7 @@ public class Database {
 			}
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
-    		queries.clear(queryKey);
+    		queries.clearAll();
     		return driver.put(organisationId, entity);
 		});
 	}
@@ -197,8 +194,7 @@ public class Database {
 			}
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
-    		queries.clear(queryKey);
+    		queries.clearAll();
     		return driver.put("global", entity);
 		});
 		
@@ -248,14 +244,12 @@ public class Database {
 			
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		DatabaseQueryKey<Table> queryKey = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, entity.getClass());
-    		queries.clear(queryKey);
+    		queries.clearAll();
     		
     		for(String id: targetIds) {
     			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, class1, id);
         		items.clear(key);
     		}
-    		queries.clear((DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, class1));
     		return driver.link(organisationId, entity, class1, targetIds);
 		});
 	}

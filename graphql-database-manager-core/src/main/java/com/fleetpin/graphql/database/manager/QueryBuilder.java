@@ -1,18 +1,51 @@
 package com.fleetpin.graphql.database.manager;
 
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
-public interface QueryBuilder<V extends Table> {
-    public QueryBuilder<V> on(Class<V> table);
+public class QueryBuilder<V extends Table> {
+	
+	private final Class<V> type;
+	private String startsWith;
+	private String from;
+	private String until;
+	private Integer limit;
+	
+    private QueryBuilder(Class<V> type) {
+    	this.type = type;
+	}
 
-    public QueryBuilder<V> startsWith(String prefix);
+    public QueryBuilder<V> startsWith(String prefix) {
+    	this.startsWith = prefix;
+    	return this;
+    }
 
-    public QueryBuilder<V> limit(Integer i);
+    public QueryBuilder<V> limit(Integer limit) {
+    	this.limit = limit;
+    	return this;
+    }
 
-    public QueryBuilder<V> from(String s);
+    public QueryBuilder<V> from(String from) {
+    	this.from = from;
+    	return this;
+    }
 
-    public QueryBuilder<V> until(String s);
+    public QueryBuilder<V> until(String until) {
+    	this.until = until;
+    	return this;
+    }
 
-    public CompletableFuture<List<V>> exec();
+    public QueryBuilder<V> applyMutation(Consumer<QueryBuilder<V>> mutator) {
+        mutator.accept((QueryBuilder<V>) this);
+        return (QueryBuilder<V>) this;
+    }
+
+    public Query<V> build() {
+    	return new Query<V>(type, startsWith, from, until, limit);
+    }
+    
+    public static <V extends Table> QueryBuilder<V> create(Class<V> type) {
+    	return new QueryBuilder<V>(type);
+    }
+    
+    
 }
