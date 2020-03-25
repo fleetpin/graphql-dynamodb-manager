@@ -62,7 +62,6 @@ public class Database {
 		return query(func.apply(QueryBuilder.create(type)).build());
 	}
 
-	static class test123 extends Table{}
 	public <T extends Table> CompletableFuture<List<T>> query(Query<T> query) {
 		DatabaseQueryKey<Table> key = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, query);
 		CompletableFuture<List<T>> toReturn = queries.load(key);

@@ -6,7 +6,7 @@ public class QueryBuilder<V extends Table> {
 	
 	private final Class<V> type;
 	private String startsWith;
-	private String from;
+	private String after;
 	private String until;
 	private Integer limit;
 	
@@ -24,8 +24,8 @@ public class QueryBuilder<V extends Table> {
     	return this;
     }
 
-    public QueryBuilder<V> from(String from) {
-    	this.from = from;
+    public QueryBuilder<V> after(String from) {
+    	this.after = from;
     	return this;
     }
 
@@ -40,7 +40,7 @@ public class QueryBuilder<V extends Table> {
     }
 
     public Query<V> build() {
-    	return new Query<V>(type, startsWith, from, until, limit);
+    	return new Query<V>(type, startsWith, after, until, limit);
     }
     
     public static <V extends Table> QueryBuilder<V> create(Class<V> type) {

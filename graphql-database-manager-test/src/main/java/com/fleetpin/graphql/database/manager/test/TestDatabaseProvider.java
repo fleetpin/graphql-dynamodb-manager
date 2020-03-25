@@ -58,6 +58,8 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
                     try {
                         if (parameter.getType().isAssignableFrom(DynamoDbManager.class)) {
                             return createDynamoDbManager(client, parameter);
+                        } else if (parameter.getType().isAssignableFrom(DynamoDbAsyncClient.class)) {
+                            return client;
                         } else {
                             return createDatabase(client, parameter, organisationId);
                         }
