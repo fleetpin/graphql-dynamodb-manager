@@ -20,9 +20,11 @@ import org.w3c.dom.Attr;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 final class DynamoDbQueryBuilderTest {
 	static class Ticket extends Table {
@@ -47,71 +49,85 @@ final class DynamoDbQueryBuilderTest {
 	}
 
 	@TestDatabase
-	void testSimpleQuery(final Database db) throws InterruptedException, ExecutionException {
-		db.put(new Ticket("budgetId1:123", "123")).get();
-		db.put(new Ticket("budgetId1:456", "456")).get();
-		db.put(new Ticket("budgetId2:123", "123")).get();
+	void testAfter(final Database db, final DynamoDbAsyncClient client) throws InterruptedException, ExecutionException {
+		db.put(new Ticket("budgetId1:sales;widgets:2020/10", "1 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2020/11", "2 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2020/12", "3 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2021/01", "4 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2021/02", "5 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets:2020/10", "6 trinkets")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets:2020/11", "7 trinkets")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets:2020/12", "8 trinkets")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets:2021/01", "9 trinkets")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets:2021/02", "10 trinkets")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets;whatchamacallits:2020/10", "11 whatchamacallits")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets;whatchamacallits:2020/11", "12 whatchamacallits")).get();
+		db.put(new Ticket("budgetId1:sales;trinkets;whatchamacallits:2020/12", "13 whatchamacallits")).get();
+		db.put(new Ticket("budgetId2:usa;expenses;flights;domestic:2020/10", "1 million dollars")).get();
 
-		Assertions.assertEquals(2, db.query(Ticket.class, builder -> builder.startsWith("ticket:budgetId1")).get().size());
 
-		var result = db.query(Ticket.class, builder -> builder);
-		Assertions.assertEquals(3, result.get().size());
+		var result2 = db.query(Ticket.class, builder -> builder.startsWith("budgetId1:").after("budgetId1:sales;widgets:2020/11").limit(10)).get();
+		Assertions.assertEquals("budgetId1:sales;widgets:2020/12", result2.get(0).getId());
+		Assertions.assertEquals(3, result2.size());
 	}
 
+	static class BigData extends Table {
+		private String name;
+		private Double[][] matrix;
+
+
+
+		public BigData(String id, String name, Double[][] matrix) {
+			setId(id);
+			this.name = name;
+			this.matrix = matrix;
+		}
+	}
+
+	private Double[][] createMatrix(Integer size) {
+		Double[][] m = new Double[size][size];
+		Random r = new Random();
+		Double k = r.nextDouble();
+		m[0][0] = r.nextDouble();
+		for (int i = 0; i < m.length; i++) {
+			for (int j = 0; j < m[i].length; j++) {
+				if (i == 0 && j == 0) continue;
+				else if (j == 0) {
+					m[i][j] = m[i - 1][m[i - 1].length - 1] + k;
+				}
+				else m[i][j] = m[i][j - 1] + k;
+			}
+		}
+
+		return m;
+	}
+
+	static String getId(int i) {
+		return i < 0 ? "" : getId((i / 26) - 1) + (char)(65 + i % 26);
+	}
+
+	// This test tests querying against large pieces of data which force Dynamoclient to return multiple pages.
 	@TestDatabase
-	void testFrom(final Database db, final DynamoDbAsyncClient client) throws InterruptedException, ExecutionException {
-		db.put(new Ticket("budgetId1:1", "1")).get();
-		db.put(new Ticket("budgetId1:2", "2")).get();
-		db.put(new Ticket("budgetId1:3", "3")).get();
-		db.put(new Ticket("budgetId1:4", "4")).get();
-		db.put(new Ticket("budgetId1:5", "5")).get();
-		db.put(new Ticket("budgetId1:6", "6")).get();
-		db.put(new Ticket("budgetId1:7", "7")).get();
-		db.put(new Ticket("budgetId1:8", "8")).get();
-		db.put(new Ticket("budgetId1:9", "9")).get();
-		db.put(new Ticket("budgetId1:10", "10")).get();
-		db.put(new Ticket("budgetId1:11", "11")).get();
-		db.put(new Ticket("budgetId1:12", "12")).get();
-		db.put(new Ticket("budgetId1:13", "13")).get();
-		db.put(new Ticket("budgetId2:1", "123")).get();
-
-		var result = db.query(Ticket.class, builder -> builder.startsWith("budgetId1:").after("budgetId1:2").limit(3)).get();
-		Assertions.assertEquals(3, result.size());
-		Assertions.assertEquals("budgetId1:3", result.get(0).getId());
-		Assertions.assertEquals("3", result.get(0).getValue());
-
-//		Map<String, AttributeValue> keyConditions = new HashMap<>();
-//		keyConditions.put(":organisationId", AttributeValue.builder().s("organisation").build());
-//		keyConditions.put(":table", AttributeValue.builder().s("tickets:budgetId1:").build());
-//
-//		client.queryPaginator(builder -> {
-//			builder.consistentRead(true).tableName("table").keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
-//					.expressionAttributeValues(keyConditions)
-//					.exclusiveStartKey(Map.of("organisationId", AttributeValue.builder().s("organisation").build(),
-//							"id", AttributeValue.builder().s("tickets:budgetId1:456").build()))
-//					.limit(2);
-//		}).subscribe(z -> {
-//			System.out.println(z);
-//		}).thenApply(__ -> "ok").get();
-//		Map<String, AttributeValue> keyConditions = new HashMap<>();
-//		keyConditions.put(":organisationId", AttributeValue.builder().s("organisation").build());
-//		keyConditions.put(":table", AttributeValue.builder().s("tickets:budgetId1:").build());
-//
-//		client.queryPaginator(builder -> {
-//			builder.consistentRead(true).tableName("table").keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
-//					.expressionAttributeValues(keyConditions)
-//					.consistentRead(true)
-//					.applyMutation(x -> x.limit(2));
-////					.exclusiveStartKey(Map.of("organisationId", AttributeValue.builder().s("organisation").build(),
-////							"id", AttributeValue.builder().s("tickets:budgetId1:456").build()));
-////					.limit(2);
-//
-//			System.out.println(builder);
-//		}).subscribe(z -> {
-//			System.out.println(z);
-//		}).thenApply(__ -> "ok").get();
+	void testBig(final Database db, final DynamoDbAsyncClient client) throws InterruptedException, ExecutionException {
+		var n = 1000;
+		List<String> ids = Stream.iterate(1, i -> i + 1)
+				.map(i -> getId(i))
+				.limit(n)
+				.collect(Collectors.toList());
 
 
+		var l = Stream.iterate(1, i -> i + 1)
+				.limit(n)
+				// Must pick a sufficiently sized matrix in order to force multiple pages to test limit, 100 works well
+				.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
+				.collect(Collectors.toList());
+
+		l.forEach(db::put);
+
+		var result = db.query(BigData.class, builder -> builder.after(getId(456)).limit(100)).get();
+
+		Assertions.assertEquals(100, result.size());
+		Assertions.assertEquals("bigdata-457", result.get(0).name);
 	}
 
 }

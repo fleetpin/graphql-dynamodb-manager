@@ -12,11 +12,9 @@ public class CompletableFutureUtil {
 
     public static <T> CompletableFuture<List<T>> sequence(List<CompletableFuture<T>> com) {
         return CompletableFuture.allOf(com.toArray(new CompletableFuture<?>[0]))
-                .thenApply(v -> {
-                return    com.stream()
+                .thenApply(v -> com.stream()
                         .map(CompletableFuture::join)
-                        .collect(Collectors.toList());
-                }
+                        .collect(Collectors.toList())
                 );
     }
 }
