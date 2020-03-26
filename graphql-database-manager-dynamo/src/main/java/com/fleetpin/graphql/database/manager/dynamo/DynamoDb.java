@@ -216,12 +216,7 @@ public final class DynamoDb extends DatabaseDriver {
             results.forEach(list -> flattener.addItems(list));
             List<T> toReturn =  flattener.results(mapper, key.getQuery().getType());
             if (key.getQuery().hasLimit()) {
-                toReturn = toReturn.stream().sorted(new Comparator<T>() {
-                    @Override
-                    public int compare(T t, T t1) {
-                        return t.getId().compareTo(t1.getId());
-                    }
-                }).limit(key.getQuery().getLimit()).collect(Collectors.toList());
+                toReturn = toReturn.stream().limit(key.getQuery().getLimit()).collect(Collectors.toList());
             }
             return toReturn;
         });
