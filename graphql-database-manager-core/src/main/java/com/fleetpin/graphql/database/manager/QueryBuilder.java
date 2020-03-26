@@ -7,7 +7,6 @@ public class QueryBuilder<V extends Table> {
 	private final Class<V> type;
 	private String startsWith;
 	private String after;
-	private String until;
 	private Integer limit;
 	
     private QueryBuilder(Class<V> type) {
@@ -29,10 +28,6 @@ public class QueryBuilder<V extends Table> {
     	return this;
     }
 
-    public QueryBuilder<V> until(String until) {
-    	this.until = until;
-    	return this;
-    }
 
     public QueryBuilder<V> applyMutation(Consumer<QueryBuilder<V>> mutator) {
         mutator.accept((QueryBuilder<V>) this);
@@ -40,7 +35,7 @@ public class QueryBuilder<V extends Table> {
     }
 
     public Query<V> build() {
-    	return new Query<V>(type, startsWith, after, until, limit);
+    	return new Query<V>(type, startsWith, after, limit);
     }
     
     public static <V extends Table> QueryBuilder<V> create(Class<V> type) {
