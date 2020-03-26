@@ -41,6 +41,8 @@ public class Query<T extends Table> {
 		return limit;
 	}
 
+	public boolean hasLimit() { return getLimit() != null; }
+
 	@Override
 	public int hashCode() {
 		return Objects.hash(after, limit, startsWith, type, until);

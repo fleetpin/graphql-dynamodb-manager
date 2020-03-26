@@ -49,12 +49,7 @@ final class DynamoDbQueryBuilderTest {
 	}
 
 	@TestDatabase
-	void testAfter(final Database db, final DynamoDbAsyncClient client) throws InterruptedException, ExecutionException {
-		db.put(new Ticket("budgetId1:sales;widgets:2020/10", "1 widgets")).get();
-		db.put(new Ticket("budgetId1:sales;widgets:2020/11", "2 widgets")).get();
-		db.put(new Ticket("budgetId1:sales;widgets:2020/12", "3 widgets")).get();
-		db.put(new Ticket("budgetId1:sales;widgets:2021/01", "4 widgets")).get();
-		db.put(new Ticket("budgetId1:sales;widgets:2021/02", "5 widgets")).get();
+	void testAfter(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new Ticket("budgetId1:sales;trinkets:2020/10", "6 trinkets")).get();
 		db.put(new Ticket("budgetId1:sales;trinkets:2020/11", "7 trinkets")).get();
 		db.put(new Ticket("budgetId1:sales;trinkets:2020/12", "8 trinkets")).get();
@@ -64,18 +59,20 @@ final class DynamoDbQueryBuilderTest {
 		db.put(new Ticket("budgetId1:sales;trinkets;whatchamacallits:2020/11", "12 whatchamacallits")).get();
 		db.put(new Ticket("budgetId1:sales;trinkets;whatchamacallits:2020/12", "13 whatchamacallits")).get();
 		db.put(new Ticket("budgetId2:usa;expenses;flights;domestic:2020/10", "1 million dollars")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2020/10", "1 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2020/11", "2 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2020/12", "3 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2021/01", "4 widgets")).get();
+		db.put(new Ticket("budgetId1:sales;widgets:2021/02", "5 widgets")).get();
 
-
-		var result2 = db.query(Ticket.class, builder -> builder.startsWith("budgetId1:").after("budgetId1:sales;widgets:2020/11").limit(10)).get();
-		Assertions.assertEquals("budgetId1:sales;widgets:2020/12", result2.get(0).getId());
-		Assertions.assertEquals(3, result2.size());
+		var result2 = db.query(Ticket.class, builder -> builder.startsWith("budgetId1:").after("budgetId1:sales;trinkets:2020/10").limit(10)).get();
+		Assertions.assertEquals("budgetId1:sales;trinkets:2020/11", result2.get(0).getId());
+		Assertions.assertEquals(10, result2.size());
 	}
 
 	static class BigData extends Table {
 		private String name;
 		private Double[][] matrix;
-
-
 
 		public BigData(String id, String name, Double[][] matrix) {
 			setId(id);
@@ -103,18 +100,17 @@ final class DynamoDbQueryBuilderTest {
 	}
 
 	static String getId(int i) {
-		return i < 0 ? "" : getId((i / 26) - 1) + (char)(65 + i % 26);
+		return String.format("%04d", i);
 	}
 
 	// This test tests querying against large pieces of data which force Dynamoclient to return multiple pages.
 	@TestDatabase
-	void testBig(final Database db, final DynamoDbAsyncClient client) throws InterruptedException, ExecutionException {
+	void testBig(final Database db) throws InterruptedException, ExecutionException {
 		var n = 1000;
 		List<String> ids = Stream.iterate(1, i -> i + 1)
 				.map(i -> getId(i))
 				.limit(n)
 				.collect(Collectors.toList());
-
 
 		var l = Stream.iterate(1, i -> i + 1)
 				.limit(n)
@@ -128,6 +124,31 @@ final class DynamoDbQueryBuilderTest {
 
 		Assertions.assertEquals(100, result.size());
 		Assertions.assertEquals("bigdata-457", result.get(0).name);
+		Assertions.assertEquals("bigdata-556", result.get(result.size() - 1).name);
 	}
 
+	@TestDatabase
+	void testBigPlusGlobal(final Database db) throws InterruptedException, ExecutionException {
+		var n = 400;
+		List<String> ids = Stream.iterate(1, i -> i + 1)
+				.map(i -> getId(i))
+				.limit(n)
+				.collect(Collectors.toList());
+
+		var l = Stream.iterate(1, i -> i + 1)
+				.limit(n)
+				// Must pick a sufficiently sized matrix in order to force multiple pages to test limit, 100 works well
+				.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
+				.collect(Collectors.toList());
+
+		l.forEach(db::put);
+		db.putGlobal(new BigData(getId(999), "big global", createMatrix(100)));
+
+		var result = db.query(BigData.class, builder -> builder.after(getId(200)).limit(100)).get();
+
+		Assertions.assertEquals(100, result.size());
+		Assertions.assertEquals("bigdata-201", result.get(0).name);
+		Assertions.assertEquals("bigdata-300", result.get(result.size() - 1).name);
+		Assertions.assertFalse(result.stream().anyMatch(x -> x.name == "big global"));
+	}
 }

@@ -15,13 +15,7 @@ package com.fleetpin.graphql.database.manager.dynamo;
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,7 +28,6 @@ import com.fleetpin.graphql.database.manager.*;
 
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
-import javafx.util.Pair;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import software.amazon.awssdk.core.async.SdkPublisher;
@@ -212,16 +205,25 @@ public final class DynamoDb extends DatabaseDriver {
         var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
 
         var futures = entityTables.stream()
-//                .flatMap(table -> Stream.of(new Pair<>(table, GLOBAL), new Pair<>(table, organisationId)))
-                .flatMap(table -> Stream.of(new Pair<>(table, organisationId)))
+                .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
                 .map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
 
         var future = CompletableFutureUtil.sequence(futures);
 
         return future.thenApply(results -> {
             var flattener = new Flatterner(false);
+
             results.forEach(list -> flattener.addItems(list));
-            return flattener.results(mapper, key.getQuery().getType());
+            List<T> toReturn =  flattener.results(mapper, key.getQuery().getType());
+            if (key.getQuery().hasLimit()) {
+                toReturn = toReturn.stream().sorted(new Comparator<T>() {
+                    @Override
+                    public int compare(T t, T t1) {
+                        return t.getId().compareTo(t1.getId());
+                    }
+                }).limit(key.getQuery().getLimit()).collect(Collectors.toList());
+            }
+            return toReturn;
         });
     }
 
@@ -245,7 +247,6 @@ public final class DynamoDb extends DatabaseDriver {
     }
 
     private CompletableFuture<List<DynamoItem>> queryGlobal(String table, AttributeValue id) {
-
         Map<String, AttributeValue> keyConditions = new HashMap<>();
         keyConditions.put(":secondaryGlobal", id);
 
@@ -309,7 +310,7 @@ public final class DynamoDb extends DatabaseDriver {
             throw new RuntimeException("until not implemented in dynamodb query");
         }
 
-        var f = new CompletableFuture<List<DynamoItem>>();
+        var s = new DynamoQuerySubscriber(table, query.getLimit());
 
        client.queryPaginator(r -> {
             r.tableName(table)
@@ -322,72 +323,14 @@ public final class DynamoDb extends DatabaseDriver {
                         }
 
                         if (query.getAfter() != null) {
-                            //TODO: needs to include organisationId as well in this map I think plus will include this key need to change query signature to be able to support this.
                             b.exclusiveStartKey(Map.of(
                                     "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
                                     "organisationId", organisationId));
                         }
                     });
-        }).subscribe(new Subscriber<QueryResponse>() {
-            ArrayList<DynamoItem> stuff = new ArrayList<>();
-            AtomicInteger togo = new AtomicInteger(query.getLimit());
-            Subscription s;
-            @Override
-            public void onSubscribe(Subscription s) {
-                s.request(1);
-                this.s = s;
-            }
+        }).subscribe(s);
 
-            @Override
-            public void onNext(QueryResponse r) {
-                r.items().stream().takeWhile(__ -> togo.getAndDecrement() >= 0).map(item -> new DynamoItem(table, item)).forEach(stuff::add);
-                if (togo.get() > 0) {
-                    this.s.request(1);
-                } else {
-                    s.cancel();
-                    this.onComplete();
-                }
-//                r.items().stream().map(item -> new DynamoItem(table, item)).forEach(stuff::add);
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                f.completeExceptionally(t);
-            }
-
-            @Override
-            public void onComplete() {
-                f.complete(stuff);
-            }
-        });
-
-        return f;
-
-
-//        var future = new CompletableFuture<List<DynamoItem>>();
-//
-////        publisher
-////            .flatMapIterable(response -> {
-////                if (response.count() > 0) {
-////                    return response.items().stream().map(Optional::of).collect(Collectors.toList());
-////                } else {
-////                    Optional<Map<String, AttributeValue>> empty = Optional.empty();
-////                    return Stream.of(empty).collect(Collectors.toList());
-////                }
-////            })
-////            .buffer(query.getLimit())
-////            .limit(1)
-////            .subscribe(items -> {
-////                var result = items.stream()
-////                        .filter(Optional::isPresent)
-////                        .map(Optional::get)
-////                        .map(item -> new DynamoItem(table, item))
-////                        .collect(Collectors.toList());
-////
-////                future.complete(result);
-////            });
-////
-//        return future;
+        return s.getFuture();
     }
 
     @Override
