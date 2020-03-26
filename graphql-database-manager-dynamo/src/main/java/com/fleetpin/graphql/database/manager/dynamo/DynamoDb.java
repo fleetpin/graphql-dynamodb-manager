@@ -214,11 +214,7 @@ public final class DynamoDb extends DatabaseDriver {
             var flattener = new Flatterner(false);
 
             results.forEach(list -> flattener.addItems(list));
-            List<T> toReturn =  flattener.results(mapper, key.getQuery().getType());
-            if (key.getQuery().hasLimit()) {
-                toReturn = toReturn.stream().limit(key.getQuery().getLimit()).collect(Collectors.toList());
-            }
-            return toReturn;
+            return flattener.results(mapper, key.getQuery().getType(), Optional.ofNullable(key.getQuery().getLimit()));
         });
     }
 

@@ -12,11 +12,7 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,11 +79,14 @@ public final class Flatterner {
 		return toReturn;
 	}
 
-
 	public <T extends Table> List<T> results(ObjectMapper mapper, Class<T> type) {
+		return results(mapper, type, Optional.empty());
+	}
+
+	public <T extends Table> List<T> results(ObjectMapper mapper, Class<T> type, Optional<Integer> limit) {
 		var items = new ArrayList<DynamoItem>(lookup.values());
 		Collections.sort(items);
-		return items.stream().map(t -> t.convertTo(mapper, type)).collect(Collectors.toList());
+		return items.stream().limit(limit.orElse(Integer.MAX_VALUE)).map(t -> t.convertTo(mapper, type)).collect(Collectors.toList());
 	}
 
 }
