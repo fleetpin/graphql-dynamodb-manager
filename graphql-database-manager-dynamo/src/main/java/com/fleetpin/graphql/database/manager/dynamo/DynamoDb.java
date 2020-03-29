@@ -297,9 +297,6 @@ public final class DynamoDb extends DatabaseDriver {
         Map<String, AttributeValue> keyConditions = new HashMap<>();
         keyConditions.put(":organisationId", organisationId);
         keyConditions.put(":table", id);
-        if (query.getUntil() != null) {
-            throw new RuntimeException("until not implemented in dynamodb query");
-        }
 
         var s = new DynamoQuerySubscriber(table, query.getLimit());
 
