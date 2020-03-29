@@ -1,4 +1,4 @@
-name: BFP branch
+name: Test
 on: 
   push:
 
