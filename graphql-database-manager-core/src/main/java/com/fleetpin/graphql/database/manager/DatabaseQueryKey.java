@@ -17,25 +17,25 @@ import java.util.Objects;
 public class DatabaseQueryKey<T extends Table> {
 
 	private final String organisationId;
-	private final Class<T> type;
+	private final Query<T> query;
 
-	DatabaseQueryKey(String organisationId, Class<T> type) {
+	DatabaseQueryKey(String organisationId, Query<T> query) {
 		super();
 		this.organisationId = organisationId;
-		this.type = type;
+		this.query = query;
 	}
 
 	public String getOrganisationId() {
 		return organisationId;
 	}
 
-	public Class<T> getType() {
-		return type;
+	public Query<T> getQuery() {
+		return query;
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(organisationId, type);
+		return Objects.hash(organisationId, query);
 	}
 
 	@Override
@@ -47,7 +47,10 @@ public class DatabaseQueryKey<T extends Table> {
 		if (getClass() != obj.getClass())
 			return false;
 		DatabaseQueryKey other = (DatabaseQueryKey) obj;
-		return Objects.equals(organisationId, other.organisationId) && Objects.equals(type, other.type);
+		return Objects.equals(organisationId, other.organisationId) && Objects.equals(query, other.query);
 	}
+	
+	
+	
 
 }

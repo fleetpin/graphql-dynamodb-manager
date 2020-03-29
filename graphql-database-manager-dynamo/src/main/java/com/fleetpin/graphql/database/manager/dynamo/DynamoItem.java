@@ -46,10 +46,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 		String id = item.get("id").s();
 		this.id = id.substring(id.indexOf(':') + 1);
 		
-		String organisationId = item.get("organisationId").s();
-		this.organisationId = organisationId.substring(id.indexOf(':') + 1);
-
-
+		this.organisationId = item.get("organisationId").s();
 	}
 
 	public boolean isDeleted() {
