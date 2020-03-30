@@ -74,8 +74,7 @@ public class Database {
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String id) {
-		return driver.queryGlobal(type, id)
-				.thenApply(items -> items.stream().map(item -> (T) item).collect(Collectors.toList()));
+		return driver.queryGlobal(type, id);
 	}
 	public <T extends Table> CompletableFuture<T> queryGlobalUnique(Class<T> type, String id) {
 		return queryGlobal(type, id).thenApply(items -> {
@@ -90,8 +89,7 @@ public class Database {
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String id) {
-		return driver.querySecondary(type, organisationId, id, items)
-				.thenApply(items -> items.stream().map(item -> (T) item).collect(Collectors.toList()));
+		return driver.querySecondary(type, organisationId, id, items);
 	}
 	public <T extends Table> CompletableFuture<T> querySecondaryUnique(Class<T> type, String id) {
 		return querySecondary(type, id).thenApply(items -> {

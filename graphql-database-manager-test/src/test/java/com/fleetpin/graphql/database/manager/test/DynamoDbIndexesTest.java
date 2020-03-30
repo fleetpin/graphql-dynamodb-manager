@@ -53,7 +53,7 @@ final class DynamoDbIndexesTest {
 
 		SimpleTable entry2 = new SimpleTable("barry", "john");
 		entry2.setId(entry1.getId());
-		db.put(entry2);
+		db.put(entry2).get();
 
 
 		Assertions.assertEquals("garry", entry1.getName());
