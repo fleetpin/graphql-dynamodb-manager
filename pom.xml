@@ -1,10 +1,8 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.fleetpin</groupId>
     <artifactId>graphql-database-manager</artifactId>
-    <version>0.2.4-SNAPSHOT</version>
+    <version>0.2.4</version>
     <name>GraphQL Builder</name>
     <description>library to make working with dynamodb and graphql easy</description>
     <url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
@@ -21,7 +19,8 @@
         <url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
         <connection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</connection>
         <developerConnection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</developerConnection>
-    </scm>
+      <tag>graphql-database-manager-0.2.4</tag>
+  </scm>
 
     <licenses>
         <license>
