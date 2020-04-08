@@ -420,7 +420,7 @@ public final class DynamoDb extends DatabaseDriver {
     }
     
     private <T extends Table> CompletableFuture<T> updateEntityLinks(AttributeValue organisationIdAttribute, T entity, String targetTable, Collection<String> targetId) {
-    	var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
+        var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
         Map<String, AttributeValue> key = new HashMap<>();
         key.put("organisationId", organisationIdAttribute);
         key.put("id", id);
@@ -487,9 +487,9 @@ public final class DynamoDb extends DatabaseDriver {
         var entityFuture = updateEntityLinks(organisationIdAttribute, entity, target, groupIds);
         
         return entityFuture.thenCompose(e -> {
-        	
-        	//wait until the entity has been updated in-case that fails then update the other targets.
-        	
+            
+            //wait until the entity has been updated in-case that fails then update the other targets.
+            
             //remove links that have been removed
             CompletableFuture<?> removeFuture = removeLinks(organisationIdAttribute, target, toRemove, source, entity.getId());
             //add the new links
