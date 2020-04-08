@@ -24,6 +24,7 @@ import com.google.common.collect.HashMultimap;
 public abstract class Table {
 
 	private String id;
+	private int revision;
 	private Instant createdAt;
 	private Instant updatedAt;
 	private String sourceTable;
@@ -37,6 +38,14 @@ public abstract class Table {
 	
 	public void setId(String id) {
 		this.id = id;
+	}
+	
+	public void setRevision(int revision) {
+		this.revision = revision;
+	}
+	
+	public int getRevision() {
+		return revision;
 	}
 	
 	void setCreatedAt(Instant createdAt) {

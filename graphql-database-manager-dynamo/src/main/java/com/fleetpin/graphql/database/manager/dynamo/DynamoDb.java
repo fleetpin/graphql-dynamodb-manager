@@ -17,8 +17,6 @@ import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -28,15 +26,15 @@ import com.fleetpin.graphql.database.manager.*;
 
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
-import software.amazon.awssdk.core.async.SdkPublisher;
+import com.google.common.base.Throwables;
+
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
-import software.amazon.awssdk.utils.CompletableFutureUtils;
 
 public final class DynamoDb extends DatabaseDriver {
-    private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
+    private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
+
+	private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
 
     private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
     private final String entityTable;
@@ -90,7 +88,7 @@ public final class DynamoDb extends DatabaseDriver {
         }
     }
 
-    public <T extends Table> CompletableFuture<T> put(String organisationId, T entity) {
+    public <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
 
         if (entity.getId() == null) {
             entity.setId(idGenerator.get());
@@ -99,14 +97,17 @@ public final class DynamoDb extends DatabaseDriver {
         if (entity.getCreatedAt() == null) {
             setCreatedAt(entity, Instant.now()); //if missing for what ever reason
         }
+        final int revision = entity.getRevision();
+        entity.setRevision(revision + 1);
         setUpdatedAt(entity, Instant.now());
         var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
         var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("organisationId", organisationIdAttribute);
         item.put("id", id);
-        item.put("item", TableUtil.toAttributes(mapper, entity));
-
+        var entries = TableUtil.toAttributes(mapper, entity);
+        item.put("revision", entries.remove("revision")); // needs to be at the top level as a limit on dynamo to be able to perform an atomic addition
+        item.put("item", AttributeValue.builder().m(entries).build());
 
         Map<String, AttributeValue> links = new HashMap<>();
         getLinks(entity).asMap().forEach((table, link) -> {
@@ -130,11 +131,37 @@ public final class DynamoDb extends DatabaseDriver {
             var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryOrganisation).build();
             item.put("secondaryOrganisation", index);
         }
-
-        return client.putItem(request -> request.tableName(entityTable).item(item)).thenApply(response -> {
+        return client.putItem(request -> request.tableName(entityTable).item(item).applyMutation(mutator -> {
+        	if(check) {
+        		String sourceTable = getSourceTable(entity);
+        		//revision checks don't really work when reading from one env and writing to another.
+                if (!sourceTable.equals(entityTable)) {
+                	return;
+                }
+                String sourceOrganisationId = getSourceOrganistaionId(entity);
+                if (!sourceOrganisationId.equals(organisationId)) {
+                	return;
+                }
+        		if(revision == 0) { //we confirm row does not exist
+        			mutator.conditionExpression("attribute_not_exists(id)");
+        		}else {
+        			Map<String, AttributeValue> variables = new HashMap<>();
+        			variables.put(":revision", AttributeValue.builder().n(Integer.toString(revision)).build());
+					//check exists and matches revision
+        			mutator.expressionAttributeValues(variables);
+        			mutator.conditionExpression("revision = :revision");
+        		}
+        		
+        	}
+        })).exceptionally(failure -> {
+        	if(failure.getCause() instanceof ConditionalCheckFailedException) {
+        		throw new RevisionMismatchException(failure.getCause());
+        	}
+        	Throwables.throwIfUnchecked(failure);
+        	throw new RuntimeException(failure);
+        }).thenApply(response -> {
             return entity;
         });
-
     }
 
     @Override
@@ -328,7 +355,7 @@ public final class DynamoDb extends DatabaseDriver {
         String source = table(entity.getClass());
 
         String target = table(class1);
-        CompletableFuture<?> future = CompletableFuture.completedFuture(null);
+        CompletableFuture<UpdateItemResponse> future = CompletableFuture.completedFuture(null);
 
         var existing = getLinks(entity).get(target);
 
@@ -345,11 +372,13 @@ public final class DynamoDb extends DatabaseDriver {
 
             Map<String, AttributeValue> v = new HashMap<>();
             v.put(":val", AttributeValue.builder().ss(entity.getId()).build());
+            v.put(":revisionIncrement", REVISION_INCREMENT);
+
 
             Map<String, String> k = new HashMap<>();
             k.put("#table", source);
 
-            var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val").expressionAttributeNames(k).expressionAttributeValues(v));
+            var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
             future = future.thenCombine(destination, (a, b) -> b);
         }
 
@@ -362,33 +391,35 @@ public final class DynamoDb extends DatabaseDriver {
 
             Map<String, AttributeValue> v = new HashMap<>();
             v.put(":val", AttributeValue.builder().ss(entity.getId()).build());
-
+            v.put(":revisionIncrement", REVISION_INCREMENT);
             Map<String, String> k = new HashMap<>();
             k.put("#table", source);
 
-            var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val").expressionAttributeNames(k).expressionAttributeValues(v))
+            var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v))
                     .handle((r, e) -> {
                         if (e != null) {
                             if (e.getCause() instanceof ConditionalCheckFailedException) {
                                 Map<String, AttributeValue> m = new HashMap<>();
                                 m.put(source, AttributeValue.builder().ss(entity.getId()).build());
                                 v.put(":val", AttributeValue.builder().m(m).build());
-                                return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val").expressionAttributeValues(v));
+                                v.put(":revisionIncrement", REVISION_INCREMENT);
+
+                                return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val ADD revision :revisionIncrement").expressionAttributeValues(v));
                             } else {
                                 throw new RuntimeException(e);
                             }
                         }
-                        return CompletableFuture.completedFuture(null);
+                        return CompletableFuture.completedFuture(r);
                     }).thenCompose(a -> a)
                     .handle((r, e) -> { //nasty if attribute now exists use first approach again...
                         if (e != null) {
                             if (e.getCause() instanceof ConditionalCheckFailedException) {
-                                return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val").expressionAttributeNames(k).expressionAttributeValues(v));
+                                return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
                             } else {
                                 throw new RuntimeException(e);
                             }
                         }
-                        return CompletableFuture.completedFuture(null);
+                        return CompletableFuture.completedFuture(r);
                     }).thenCompose(a -> a);
 
 
@@ -405,37 +436,43 @@ public final class DynamoDb extends DatabaseDriver {
         Map<String, AttributeValue> values = new HashMap<>();
         if (groupIds.isEmpty()) {
             values.put(":val", AttributeValue.builder().nul(true).build());
+            
         } else {
             values.put(":val", AttributeValue.builder().ss(groupIds).build());
         }
+        values.put(":revisionIncrement", REVISION_INCREMENT);
+
         setLinks(entity, target, groupIds);
 
-        var destination = client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)").updateExpression("SET links.#table = :val").expressionAttributeNames(k).expressionAttributeValues(values))
+        var destination = client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)").updateExpression("SET links.#table = :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW))
                 .handle((r, e) -> {
                     if (e != null) {
                         if (e.getCause() instanceof ConditionalCheckFailedException) {
                             Map<String, AttributeValue> m = new HashMap<>();
                             m.put(target, values.get(":val"));
                             values.put(":val", AttributeValue.builder().m(m).build());
-                            return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val").expressionAttributeValues(values));
+                            values.put(":revisionIncrement", REVISION_INCREMENT);
+                            
+                            return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val ADD revision :revisionIncrement").expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW));
                         } else {
                             throw new RuntimeException(e);
                         }
                     }
-                    return CompletableFuture.completedFuture(null);
+                    return CompletableFuture.completedFuture(r);
                 }).thenCompose(a -> a)
                 .handle((r, e) -> {
                     if (e != null) {
                         if (e.getCause() instanceof ConditionalCheckFailedException) {
-                            return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)").updateExpression("SET links.#table = :val").expressionAttributeNames(k).expressionAttributeValues(values));
+                            return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)").updateExpression("SET links.#table = :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW));
                         } else {
                             throw new RuntimeException(e);
                         }
                     }
-                    return CompletableFuture.completedFuture(null);
+                    return CompletableFuture.completedFuture(r);
                 }).thenCompose(a -> a);
         future = future.thenCombine(destination, (a, b) -> b);
         return future.thenApply(response -> {
+        	entity.setRevision(Integer.parseInt(response.attributes().get("revision").n()));
             return entity;
         });
     }

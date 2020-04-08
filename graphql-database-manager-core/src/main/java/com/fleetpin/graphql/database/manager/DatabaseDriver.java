@@ -24,7 +24,8 @@ public abstract class DatabaseDriver {
 
     public abstract <T extends Table> CompletableFuture<T> deleteLinks(String organisationId, T entity);
 
-    public abstract <T extends Table> CompletableFuture<T> put(String organisationId, T entity);
+    public abstract <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check);
+    
 
     public abstract <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys);
 
@@ -78,4 +79,6 @@ public abstract class DatabaseDriver {
     protected <T extends Table> DatabaseKey<T> createDatabaseKey(final String organisationId, final Class<T> type, final String id) {
         return new DatabaseKey<>(organisationId, type, id);
     }
+
+	
 }
