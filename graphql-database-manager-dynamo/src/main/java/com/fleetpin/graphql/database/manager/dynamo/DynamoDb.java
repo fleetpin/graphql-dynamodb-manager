@@ -33,8 +33,7 @@ import software.amazon.awssdk.services.dynamodb.model.*;
 
 public final class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
-
-	private final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
+    private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
 
     private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
     private final String entityTable;
@@ -132,33 +131,33 @@ public final class DynamoDb extends DatabaseDriver {
             item.put("secondaryOrganisation", index);
         }
         return client.putItem(request -> request.tableName(entityTable).item(item).applyMutation(mutator -> {
-        	if(check) {
-        		String sourceTable = getSourceTable(entity);
-        		//revision checks don't really work when reading from one env and writing to another.
+            if(check) {
+                String sourceTable = getSourceTable(entity);
+                //revision checks don't really work when reading from one env and writing to another.
                 if (!sourceTable.equals(entityTable)) {
-                	return;
+                    return;
                 }
                 String sourceOrganisationId = getSourceOrganistaionId(entity);
                 if (!sourceOrganisationId.equals(organisationId)) {
-                	return;
+                    return;
                 }
-        		if(revision == 0) { //we confirm row does not exist
-        			mutator.conditionExpression("attribute_not_exists(id)");
-        		}else {
-        			Map<String, AttributeValue> variables = new HashMap<>();
-        			variables.put(":revision", AttributeValue.builder().n(Integer.toString(revision)).build());
-					//check exists and matches revision
-        			mutator.expressionAttributeValues(variables);
-        			mutator.conditionExpression("revision = :revision");
-        		}
-        		
-        	}
+                if(revision == 0) { //we confirm row does not exist
+                    mutator.conditionExpression("attribute_not_exists(id)");
+                }else {
+                    Map<String, AttributeValue> variables = new HashMap<>();
+                    variables.put(":revision", AttributeValue.builder().n(Integer.toString(revision)).build());
+                    //check exists and matches revision
+                    mutator.expressionAttributeValues(variables);
+                    mutator.conditionExpression("revision = :revision");
+                }
+                
+            }
         })).exceptionally(failure -> {
-        	if(failure.getCause() instanceof ConditionalCheckFailedException) {
-        		throw new RevisionMismatchException(failure.getCause());
-        	}
-        	Throwables.throwIfUnchecked(failure);
-        	throw new RuntimeException(failure);
+            if(failure.getCause() instanceof ConditionalCheckFailedException) {
+                throw new RevisionMismatchException(failure.getCause());
+            }
+            Throwables.throwIfUnchecked(failure);
+            throw new RuntimeException(failure);
         }).thenApply(response -> {
             return entity;
         });
@@ -472,7 +471,7 @@ public final class DynamoDb extends DatabaseDriver {
                 }).thenCompose(a -> a);
         future = future.thenCombine(destination, (a, b) -> b);
         return future.thenApply(response -> {
-        	entity.setRevision(Integer.parseInt(response.attributes().get("revision").n()));
+            entity.setRevision(Integer.parseInt(response.attributes().get("revision").n()));
             return entity;
         });
     }
