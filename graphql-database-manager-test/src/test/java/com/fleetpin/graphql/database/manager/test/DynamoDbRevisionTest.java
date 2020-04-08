@@ -32,6 +32,7 @@ public class DynamoDbRevisionTest {
 		var entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(1, entries.size());
 		Assertions.assertEquals("garry", entries.get(0).name);
+		Assertions.assertEquals(1, entries.get(0).getRevision());
 		
 		var e = new SimpleTable("1", "garry");
 		var cause = Assertions.assertThrows(ExecutionException.class, () -> db.checkPut(e).get());
@@ -53,6 +54,7 @@ public class DynamoDbRevisionTest {
 		var entry = new SimpleTable("1", "garry");
 		
 		entry = db.checkPut(entry).get();
+		Assertions.assertEquals(1, entry.getRevision());
 		entry = db.checkPut(entry).get();
 		Assertions.assertEquals(2, entry.getRevision());
 		

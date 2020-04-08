@@ -96,7 +96,7 @@ public final class DynamoDb extends DatabaseDriver {
         if (entity.getCreatedAt() == null) {
             setCreatedAt(entity, Instant.now()); //if missing for what ever reason
         }
-        final int revision = entity.getRevision();
+        final long revision = entity.getRevision();
         entity.setRevision(revision + 1);
         setUpdatedAt(entity, Instant.now());
         var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
@@ -145,7 +145,7 @@ public final class DynamoDb extends DatabaseDriver {
                     mutator.conditionExpression("attribute_not_exists(id)");
                 }else {
                     Map<String, AttributeValue> variables = new HashMap<>();
-                    variables.put(":revision", AttributeValue.builder().n(Integer.toString(revision)).build());
+                    variables.put(":revision", AttributeValue.builder().n(Long.toString(revision)).build());
                     //check exists and matches revision
                     mutator.expressionAttributeValues(variables);
                     mutator.conditionExpression("revision = :revision");
@@ -346,60 +346,52 @@ public final class DynamoDb extends DatabaseDriver {
 
         return s.getFuture();
     }
+    
+    private CompletableFuture<?> removeLinks(AttributeValue organisationIdAttribute, String fromTable, Set<String> fromIds, String targetTable, String targetId) {
 
-    @Override
-    public <T extends Table> CompletableFuture<T> link(String organisationId, T entity, Class<? extends Table> class1, List<String> groupIds) {
-
-        var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
-        String source = table(entity.getClass());
-
-        String target = table(class1);
-        CompletableFuture<UpdateItemResponse> future = CompletableFuture.completedFuture(null);
-
-        var existing = getLinks(entity).get(target);
-
-        var toAdd = new HashSet<>(groupIds);
-        toAdd.removeAll(existing);
-
-        var toRemove = new HashSet<>(existing);
-        toRemove.removeAll(groupIds);
-        for (String targetId : toRemove) {
-            var targetIdAttribute = AttributeValue.builder().s(target + ":" + targetId).build();
+        var targetIdAttribute = AttributeValue.builder().ss(targetId).build();
+        var futures = fromIds.stream().map(fromId ->  {
+            var fromIdAttribute = AttributeValue.builder().s(fromTable + ":" + fromId).build();
             Map<String, AttributeValue> targetKey = new HashMap<>();
             targetKey.put("organisationId", organisationIdAttribute);
-            targetKey.put("id", targetIdAttribute);
+            targetKey.put("id", fromIdAttribute);
 
             Map<String, AttributeValue> v = new HashMap<>();
-            v.put(":val", AttributeValue.builder().ss(entity.getId()).build());
+            v.put(":val", targetIdAttribute);
             v.put(":revisionIncrement", REVISION_INCREMENT);
 
 
             Map<String, String> k = new HashMap<>();
-            k.put("#table", source);
+            k.put("#table", targetTable);
 
-            var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
-            future = future.thenCombine(destination, (a, b) -> b);
-        }
+            return client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
+        }).toArray(CompletableFuture[]::new);
+        
+        return CompletableFuture.allOf(futures);
+    }
+    
+    private CompletableFuture<?> addLinks(AttributeValue organisationIdAttribute, String fromTable, Set<String> fromIds, String targetTable, String targetId) {
+        
+        var targetIdAttribute = AttributeValue.builder().ss(targetId).build();
 
-
-        for (String targetId : toAdd) {
-            var targetIdAttribute = AttributeValue.builder().s(target + ":" + targetId).build();
+        var futures = fromIds.stream().map(fromId ->  {
+            var fromIdAttribute = AttributeValue.builder().s(fromTable + ":" + fromId).build();
             Map<String, AttributeValue> targetKey = new HashMap<>();
             targetKey.put("organisationId", organisationIdAttribute);
-            targetKey.put("id", targetIdAttribute);
+            targetKey.put("id", fromIdAttribute);
 
             Map<String, AttributeValue> v = new HashMap<>();
-            v.put(":val", AttributeValue.builder().ss(entity.getId()).build());
+            v.put(":val", targetIdAttribute);
             v.put(":revisionIncrement", REVISION_INCREMENT);
             Map<String, String> k = new HashMap<>();
-            k.put("#table", source);
+            k.put("#table", targetTable);
 
-            var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v))
+            return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v))
                     .handle((r, e) -> {
                         if (e != null) {
                             if (e.getCause() instanceof ConditionalCheckFailedException) {
                                 Map<String, AttributeValue> m = new HashMap<>();
-                                m.put(source, AttributeValue.builder().ss(entity.getId()).build());
+                                m.put(targetTable, targetIdAttribute);
                                 v.put(":val", AttributeValue.builder().m(m).build());
                                 v.put(":revisionIncrement", REVISION_INCREMENT);
 
@@ -422,33 +414,35 @@ public final class DynamoDb extends DatabaseDriver {
                     }).thenCompose(a -> a);
 
 
-            future = future.thenCombine(destination, (a, b) -> b);
-        }
-        var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
+        }).toArray(CompletableFuture[]::new);
+        
+        return CompletableFuture.allOf(futures);
+    }
+    
+    private <T extends Table> CompletableFuture<T> updateEntityLinks(AttributeValue organisationIdAttribute, T entity, String targetTable, Collection<String> targetId) {
+    	var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
         Map<String, AttributeValue> key = new HashMap<>();
         key.put("organisationId", organisationIdAttribute);
         key.put("id", id);
 
         Map<String, String> k = new HashMap<>();
-        k.put("#table", target);
+        k.put("#table", targetTable);
 
         Map<String, AttributeValue> values = new HashMap<>();
-        if (groupIds.isEmpty()) {
+        if (targetId.isEmpty()) {
             values.put(":val", AttributeValue.builder().nul(true).build());
             
         } else {
-            values.put(":val", AttributeValue.builder().ss(groupIds).build());
+            values.put(":val", AttributeValue.builder().ss(targetId).build());
         }
         values.put(":revisionIncrement", REVISION_INCREMENT);
-
-        setLinks(entity, target, groupIds);
 
         var destination = client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)").updateExpression("SET links.#table = :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW))
                 .handle((r, e) -> {
                     if (e != null) {
                         if (e.getCause() instanceof ConditionalCheckFailedException) {
                             Map<String, AttributeValue> m = new HashMap<>();
-                            m.put(target, values.get(":val"));
+                            m.put(targetTable, values.get(":val"));
                             values.put(":val", AttributeValue.builder().m(m).build());
                             values.put(":revisionIncrement", REVISION_INCREMENT);
                             
@@ -469,10 +463,39 @@ public final class DynamoDb extends DatabaseDriver {
                     }
                     return CompletableFuture.completedFuture(r);
                 }).thenCompose(a -> a);
-        future = future.thenCombine(destination, (a, b) -> b);
-        return future.thenApply(response -> {
-            entity.setRevision(Integer.parseInt(response.attributes().get("revision").n()));
+        return destination.thenApply(response -> {
+            entity.setRevision(Long.parseLong(response.attributes().get("revision").n()));
             return entity;
+        });
+    }
+
+    @Override
+    public <T extends Table> CompletableFuture<T> link(String organisationId, T entity, Class<? extends Table> class1, List<String> groupIds) {
+
+        var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
+        String source = table(entity.getClass());
+
+        String target = table(class1);
+        var existing = getLinks(entity).get(target);
+
+        var toAdd = new HashSet<>(groupIds);
+        toAdd.removeAll(existing);
+
+        var toRemove = new HashSet<>(existing);
+        toRemove.removeAll(groupIds);
+
+        var entityFuture = updateEntityLinks(organisationIdAttribute, entity, target, groupIds);
+        
+        return entityFuture.thenCompose(e -> {
+        	
+        	//wait until the entity has been updated in-case that fails then update the other targets.
+        	
+            //remove links that have been removed
+            CompletableFuture<?> removeFuture = removeLinks(organisationIdAttribute, target, toRemove, source, entity.getId());
+            //add the new links
+            CompletableFuture<?> addFuture = addLinks(organisationIdAttribute, target, toAdd, source, entity.getId());
+            
+            return CompletableFuture.allOf(removeFuture, addFuture).thenApply(__ -> e);
         });
     }
 

@@ -67,7 +67,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 			Table t = (Table) table;
 			var revision = item.get("revision");
 			if(revision != null) {
-				t.setRevision(Integer.parseInt(revision.n()));
+				t.setRevision(Long.parseLong(revision.n()));
 			}
 			TableAccess.setTableSource(t, this.table, links, item.get("organisationId").s());
 		}
