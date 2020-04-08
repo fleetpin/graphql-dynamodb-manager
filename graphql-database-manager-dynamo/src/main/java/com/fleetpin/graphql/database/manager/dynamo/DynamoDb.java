@@ -495,7 +495,10 @@ public final class DynamoDb extends DatabaseDriver {
             //add the new links
             CompletableFuture<?> addFuture = addLinks(organisationIdAttribute, target, toAdd, source, entity.getId());
             
-            return CompletableFuture.allOf(removeFuture, addFuture).thenApply(__ -> e);
+            return CompletableFuture.allOf(removeFuture, addFuture).thenApply(__ -> {
+            	 setLinks(entity, target, groupIds);
+            	return e;
+            });
         });
     }
 
