@@ -169,30 +169,32 @@ public class Database {
 			if(!allow) {
 				throw new ForbiddenWriteException("Delete links not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-			return driver.deleteLinks(organisationId, entity).thenCompose(t -> put(entity));
+			//impact of clearing links to tricky
+			items.clearAll();
+			queries.clearAll();
+			return driver.deleteLinks(organisationId, entity);
 		});
 	}
 
-	public <T extends Table> CompletableFuture<T> put(T entity) {
-		return putAllow.apply(entity).thenCompose(allow -> {
-			if(!allow) {
-				throw new ForbiddenWriteException("put not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
-			}
-			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
-    		items.clear(key);
-    		queries.clearAll();
-    		return driver.put(organisationId, entity, false);
-		});
-	}
-	
 	/**
 	 * Will only pass if the entity revision matches what is currently in the database
 	 * @param <T> database entity type to update
 	 * @param entity revision must match database or request will fail
 	 * @return updated entity with the revision incremented by one
-	 * completeable future will fail with a RevisionMismatchException
+	 * CompletableFuture will fail with a RevisionMismatchException
 	 */
-	public <T extends Table> CompletableFuture<T> checkPut(T entity) {
+	public <T extends Table> CompletableFuture<T> put(T entity) {
+		return put(entity, true);
+	}
+	
+	/**
+	 * @param <T> database entity type to update
+	 * @param entity revision must match database or request will fail
+	 * @param check Will only pass if the entity revision matches what is currently in the database
+	 * @return updated entity with the revision incremented by one
+	 * CompletableFuture will fail with a RevisionMismatchException
+	 */
+	public <T extends Table> CompletableFuture<T> put(T entity, boolean check) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
 				throw new ForbiddenWriteException("put not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
@@ -200,9 +202,11 @@ public class Database {
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-    		return driver.put(organisationId, entity, true);
+    		return driver.put(organisationId, entity, check);
 		});
 	}
+	
+	
 	public <T extends Table> CompletableFuture<T> putGlobal(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
