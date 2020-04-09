@@ -83,7 +83,7 @@ public class TableUtil {
 		return null;
 	}
 
-	static AttributeValue toAttributes(ObjectMapper mapper, Object entity) {
+	static Map<String, AttributeValue> toAttributes(ObjectMapper mapper, Object entity) {
 		Map<String, AttributeValue> entries = new HashMap<>();
 		ObjectNode tree = mapper.valueToTree(entity);
 
@@ -95,7 +95,8 @@ public class TableUtil {
 				entries.put(field.getKey(), attribute);
 			}
 		});
-		return AttributeValue.builder().m(entries).build();
+		return entries;
+		
 	}
 
 

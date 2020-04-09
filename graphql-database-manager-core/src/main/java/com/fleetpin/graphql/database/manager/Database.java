@@ -169,11 +169,32 @@ public class Database {
 			if(!allow) {
 				throw new ForbiddenWriteException("Delete links not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-			return driver.deleteLinks(organisationId, entity).thenCompose(t -> put(entity));
+			//impact of clearing links to tricky
+			items.clearAll();
+			queries.clearAll();
+			return driver.deleteLinks(organisationId, entity);
 		});
 	}
 
+	/**
+	 * Will only pass if the entity revision matches what is currently in the database
+	 * @param <T> database entity type to update
+	 * @param entity revision must match database or request will fail
+	 * @return updated entity with the revision incremented by one
+	 * CompletableFuture will fail with a RevisionMismatchException
+	 */
 	public <T extends Table> CompletableFuture<T> put(T entity) {
+		return put(entity, true);
+	}
+	
+	/**
+	 * @param <T> database entity type to update
+	 * @param entity revision must match database or request will fail
+	 * @param check Will only pass if the entity revision matches what is currently in the database
+	 * @return updated entity with the revision incremented by one
+	 * CompletableFuture will fail with a RevisionMismatchException
+	 */
+	public <T extends Table> CompletableFuture<T> put(T entity, boolean check) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
 				throw new ForbiddenWriteException("put not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
@@ -181,9 +202,11 @@ public class Database {
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-    		return driver.put(organisationId, entity);
+    		return driver.put(organisationId, entity, check);
 		});
 	}
+	
+	
 	public <T extends Table> CompletableFuture<T> putGlobal(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
@@ -192,7 +215,7 @@ public class Database {
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-    		return driver.put("global", entity);
+    		return driver.put("global", entity, false);
 		});
 		
 	}
@@ -243,10 +266,17 @@ public class Database {
     		items.clear(key);
     		queries.clearAll();
     		
+    		for(String id: getLinkIds(entity, class1)) {
+    			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, class1, id);
+        		items.clear(key);
+    		}
+    		
     		for(String id: targetIds) {
     			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, class1, id);
         		items.clear(key);
     		}
+    		
+    		
     		return driver.link(organisationId, entity, class1, targetIds);
 		});
 	}

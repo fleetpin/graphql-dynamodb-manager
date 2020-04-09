@@ -87,7 +87,7 @@ final class DynamoDbIndexesTest {
 	}
 
 	@TestDatabase
-	void testSecondaryInheritance(final Database db, final Database dbProd) throws InterruptedException, ExecutionException {
+	void testSecondaryInheritance(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames({"prod"}) final Database dbProd) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = dbProd.put(entry1).get();
 

@@ -29,7 +29,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.database.manager.DatabaseDriver;
 import com.fleetpin.graphql.database.manager.DatabaseManager;
-import com.fleetpin.graphql.database.manager.Table;
 import com.google.common.base.Preconditions;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -134,7 +133,8 @@ public final class DynamoDbManager extends DatabaseManager {
 	}
 
 	public AttributeValue toAttributes(Object entity) {
-		return TableUtil.toAttributes(mapper, entity);
+		var entries = TableUtil.toAttributes(mapper, entity);
+		return AttributeValue.builder().m(entries).build();
 	}	
 	
 	
