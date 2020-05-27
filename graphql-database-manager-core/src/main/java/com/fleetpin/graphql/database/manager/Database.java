@@ -176,6 +176,10 @@ public class Database {
 		});
 	}
 
+	public CompletableFuture<Boolean> destroyOrganisation(final String organisationId) {
+		return driver.destroyOrganisation(organisationId);
+	}
+
 	/**
 	 * Will only pass if the entity revision matches what is currently in the database
 	 * @param <T> database entity type to update

@@ -610,6 +610,54 @@ public final class DynamoDb extends DatabaseDriver {
     }
 
     @Override
+    public CompletableFuture<Boolean> destroyOrganisation(final String organisationId) {
+        final var organisationCondition = Condition.builder()
+                .comparisonOperator(ComparisonOperator.EQ)
+                .attributeValueList(AttributeValue.builder().s(organisationId).build())
+                .build();
+
+        final var associatedOrganisationItems = QueryRequest.builder()
+                .tableName(entityTable)
+                .keyConditions(Map.of("organisationId", organisationCondition))
+                .build();
+
+        final var deletedOrganisationFuture = new CompletableFuture<Boolean>();
+
+        client.query(associatedOrganisationItems)
+                .thenApply(response -> {
+                    if (!response.hasItems()) {
+                        deletedOrganisationFuture.complete(false);
+                        return new ArrayList<CompletableFuture<DeleteItemResponse>>();
+                    }
+
+                    return response.items()
+                            .stream()
+                            .map(item -> {
+                                final var deleteFoundItem = DeleteItemRequest.builder()
+                                        .tableName(entityTable)
+                                        .returnValues(ReturnValue.ALL_OLD)
+                                        .key(Map.of(
+                                                "organisationId", item.get("organisationId"),
+                                                "id", item.get("id")
+                                        ))
+                                        .build();
+
+                                return client.deleteItem(deleteFoundItem);
+                            })
+                            .collect(Collectors.toList());
+                })
+                .thenAccept(futures -> futures.stream()
+                        .map(future -> future.thenApply(DeleteItemResponse::hasAttributes))
+                        .reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> aBoolean && bBoolean))
+                        .ifPresentOrElse(
+                                future -> future.thenAccept(deletedOrganisationFuture::complete),
+                                () -> deletedOrganisationFuture.complete(false)
+                        ));
+
+        return deletedOrganisationFuture;
+    }
+
+    @Override
     public String newId() {
         return idGenerator.get();
     }
