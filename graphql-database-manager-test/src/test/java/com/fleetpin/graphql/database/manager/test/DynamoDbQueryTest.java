@@ -112,7 +112,7 @@ final class DynamoDbQueryTest {
 		Assertions.assertEquals("bob", entries.get(1).name);
 		Assertions.assertEquals("frank", entries.get(2).name);
 
-		db.delete(entries.get(1), false);
+		db.delete(entries.get(1), false).get();
 
 		entries = db.query(SimpleTable.class).get();
 		Assertions.assertEquals(2, entries.size());
