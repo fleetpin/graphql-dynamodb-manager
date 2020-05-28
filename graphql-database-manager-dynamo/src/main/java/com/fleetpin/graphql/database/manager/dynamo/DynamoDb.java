@@ -12,24 +12,24 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
+import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
+import com.google.common.base.Throwables;
+import com.google.common.collect.Iterators;
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
+import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.*;
-
-import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
-import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
-import com.google.common.base.Throwables;
-
-import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-import software.amazon.awssdk.services.dynamodb.model.*;
+import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 public final class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
@@ -627,28 +627,33 @@ public final class DynamoDb extends DatabaseDriver {
                 .thenApply(response -> {
                     if (!response.hasItems()) {
                         deletedOrganisationFuture.complete(false);
-                        return new ArrayList<CompletableFuture<DeleteItemResponse>>();
+                        return Stream.<CompletableFuture<BatchWriteItemResponse>>empty();
                     }
 
-                    return response.items()
+                    final Iterable<List<WriteRequest>> deleteRequestBatches = () -> Iterators.partition(response.items()
                             .stream()
                             .map(item -> {
-                                final var deleteFoundItem = DeleteItemRequest.builder()
-                                        .tableName(entityTable)
-                                        .returnValues(ReturnValue.ALL_OLD)
-                                        .key(Map.of(
-                                                "organisationId", item.get("organisationId"),
-                                                "id", item.get("id")
-                                        ))
+                                final var deleteRequest = DeleteRequest.builder().key(Map.of(
+                                        "organisationId", item.get("organisationId"),
+                                        "id", item.get("id")
+                                )).build();
+
+                                return WriteRequest.builder().deleteRequest(deleteRequest).build();
+                            })
+                            .collect(Collectors.toList()).iterator(), 25);
+
+                    return StreamSupport.stream(deleteRequestBatches.spliterator(), false)
+                            .map(deleteRequestBatch -> {
+                                final var batchDeleteItemRequest = BatchWriteItemRequest.builder()
+                                        .requestItems(Map.of(entityTable, deleteRequestBatch))
                                         .build();
 
-                                return client.deleteItem(deleteFoundItem);
-                            })
-                            .collect(Collectors.toList());
+                                return client.batchWriteItem(batchDeleteItemRequest);
+                            });
                 })
-                .thenAccept(futures -> futures.stream()
-                        .map(future -> future.thenApply(DeleteItemResponse::hasAttributes))
-                        .reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> aBoolean && bBoolean))
+                .thenAccept(futures -> futures
+                        .map(future -> future.thenApply(BatchWriteItemResponse::hasUnprocessedItems))
+                        .reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> !aBoolean && !bBoolean))
                         .ifPresentOrElse(
                                 future -> future.thenAccept(deletedOrganisationFuture::complete),
                                 () -> deletedOrganisationFuture.complete(false)
