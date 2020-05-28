@@ -17,7 +17,7 @@ import com.fleetpin.graphql.database.manager.*;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.base.Throwables;
-import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
@@ -27,13 +27,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 public final class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
     private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
+    private static final int BATCH_WRITE_SIZE = 25;
 
     private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
     private final String entityTable;
@@ -630,7 +630,7 @@ public final class DynamoDb extends DatabaseDriver {
                         return Stream.<CompletableFuture<BatchWriteItemResponse>>empty();
                     }
 
-                    final Iterable<List<WriteRequest>> deleteRequestBatches = () -> Iterators.partition(response.items()
+                    return Lists.partition(response.items()
                             .stream()
                             .map(item -> {
                                 final var deleteRequest = DeleteRequest.builder().key(Map.of(
@@ -640,9 +640,8 @@ public final class DynamoDb extends DatabaseDriver {
 
                                 return WriteRequest.builder().deleteRequest(deleteRequest).build();
                             })
-                            .collect(Collectors.toList()).iterator(), 25);
-
-                    return StreamSupport.stream(deleteRequestBatches.spliterator(), false)
+                            .collect(Collectors.toList()), BATCH_WRITE_SIZE)
+                            .stream()
                             .map(deleteRequestBatch -> {
                                 final var batchDeleteItemRequest = BatchWriteItemRequest.builder()
                                         .requestItems(Map.of(entityTable, deleteRequestBatch))
