@@ -12,28 +12,28 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
+import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
+import com.google.common.base.Throwables;
+import com.google.common.collect.Lists;
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
+import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.*;
-
-import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
-import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
-import com.google.common.base.Throwables;
-
-import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-import software.amazon.awssdk.services.dynamodb.model.*;
+import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 public final class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
     private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
+    private static final int BATCH_WRITE_SIZE = 25;
 
     private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
     private final String entityTable;
@@ -607,6 +607,58 @@ public final class DynamoDb extends DatabaseDriver {
         });
 
 
+    }
+
+    @Override
+    public CompletableFuture<Boolean> destroyOrganisation(final String organisationId) {
+        final var organisationCondition = Condition.builder()
+                .comparisonOperator(ComparisonOperator.EQ)
+                .attributeValueList(AttributeValue.builder().s(organisationId).build())
+                .build();
+
+        final var associatedOrganisationItems = QueryRequest.builder()
+                .tableName(entityTable)
+                .keyConditions(Map.of("organisationId", organisationCondition))
+                .build();
+
+        final var deletedOrganisationFuture = new CompletableFuture<Boolean>();
+
+        client.query(associatedOrganisationItems)
+                .thenApply(response -> {
+                    if (!response.hasItems()) {
+                        deletedOrganisationFuture.complete(false);
+                        return Stream.<CompletableFuture<BatchWriteItemResponse>>empty();
+                    }
+
+                    return Lists.partition(response.items()
+                            .stream()
+                            .map(item -> {
+                                final var deleteRequest = DeleteRequest.builder().key(Map.of(
+                                        "organisationId", item.get("organisationId"),
+                                        "id", item.get("id")
+                                )).build();
+
+                                return WriteRequest.builder().deleteRequest(deleteRequest).build();
+                            })
+                            .collect(Collectors.toList()), BATCH_WRITE_SIZE)
+                            .stream()
+                            .map(deleteRequestBatch -> {
+                                final var batchDeleteItemRequest = BatchWriteItemRequest.builder()
+                                        .requestItems(Map.of(entityTable, deleteRequestBatch))
+                                        .build();
+
+                                return client.batchWriteItem(batchDeleteItemRequest);
+                            });
+                })
+                .thenAccept(futures -> futures
+                        .map(future -> future.thenApply(BatchWriteItemResponse::hasUnprocessedItems))
+                        .reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> !aBoolean && !bBoolean))
+                        .ifPresentOrElse(
+                                future -> future.thenAccept(deletedOrganisationFuture::complete),
+                                () -> deletedOrganisationFuture.complete(false)
+                        ));
+
+        return deletedOrganisationFuture;
     }
 
     @Override

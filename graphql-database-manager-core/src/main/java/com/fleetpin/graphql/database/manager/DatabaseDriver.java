@@ -43,6 +43,8 @@ public abstract class DatabaseDriver {
 
     public abstract String newId();
 
+    public abstract CompletableFuture<Boolean> destroyOrganisation(final String organisationId);
+
     protected <T extends Table> String getSourceOrganistaionId(final T entity) {
         return entity.getSourceOrganistaionId();
     }
