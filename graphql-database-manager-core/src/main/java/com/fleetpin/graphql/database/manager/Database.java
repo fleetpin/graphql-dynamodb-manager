@@ -12,13 +12,13 @@
 
 package com.fleetpin.graphql.database.manager;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
+import com.fleetpin.graphql.database.manager.access.ModificationPermission;
+import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
+import org.dataloader.DataLoader;
+import org.dataloader.DataLoaderOptions;
+
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -26,13 +26,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import org.dataloader.DataLoader;
-import org.dataloader.DataLoaderOptions;
-
-import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
-import com.fleetpin.graphql.database.manager.access.ModificationPermission;
-import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 
 @SuppressWarnings("unchecked")
 public class Database {
@@ -43,7 +36,7 @@ public class Database {
 	private final TableDataLoader<DatabaseQueryKey<Table>> queries;
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
-	
+
 	Database(String organisationId, DatabaseDriver driver, ModificationPermission putAllow) {
 		this.organisationId = organisationId;
 		this.driver = driver;
@@ -52,7 +45,7 @@ public class Database {
 		items = new TableDataLoader<>(new DataLoader<DatabaseKey<Table>, Table>(keys -> {
 			return driver.get(keys);
 		}, DataLoaderOptions.newOptions().setMaxBatchSize(driver.maxBatchSize()))); // will auto call global
-		
+
 		queries = new TableDataLoader<>(new DataLoader<DatabaseQueryKey<Table>, List<Table>>(keys -> {
 			return merge(keys.stream().map(key -> driver.query(key)));
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
@@ -115,7 +108,7 @@ public class Database {
 			}
 		});
 	}
-	
+
 	public <T extends Table> CompletableFuture<T> get(Class<T> type, String id) {
 		DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, type, id);
 		return items.load(key).thenApply(item -> {
@@ -136,7 +129,7 @@ public class Database {
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-    		
+
     		if(deleteLinks) {
     			return deleteLinks(entity).thenCompose(t -> driver.delete(organisationId, entity));
     		}
@@ -158,7 +151,7 @@ public class Database {
 		});
 
 	}
-	
+
 	public <T extends Table> CompletableFuture<Optional<T>> getLinkOptional(final Table entry, Class<T> target) {
 		return getLink(entry, target).thenApply(t -> Optional.ofNullable(t));
 
@@ -190,7 +183,7 @@ public class Database {
 	public <T extends Table> CompletableFuture<T> put(T entity) {
 		return put(entity, true);
 	}
-	
+
 	/**
 	 * @param <T> database entity type to update
 	 * @param entity revision must match database or request will fail
@@ -209,8 +202,8 @@ public class Database {
     		return driver.put(organisationId, entity, check);
 		});
 	}
-	
-	
+
+
 	public <T extends Table> CompletableFuture<T> putGlobal(T entity) {
 		return putAllow.apply(entity).thenCompose(allow -> {
 			if(!allow) {
@@ -221,12 +214,12 @@ public class Database {
     		queries.clearAll();
     		return driver.put("global", entity, false);
 		});
-		
+
 	}
 
 	private <T> CompletableFuture<List<T>> merge(Stream<CompletableFuture<T>> stream) {
 		List<CompletableFuture<T>> list = stream.collect(Collectors.toList());
-		
+
 		return CompletableFuture.allOf(list.toArray(CompletableFuture[]::new)).thenApply(__ -> {
 			List<T> toReturn = new ArrayList<>(list.size());
 			for(var item: list) {
@@ -236,9 +229,9 @@ public class Database {
 					throw new RuntimeException(e);
 				}
 			}
-			return toReturn; 
+			return toReturn;
 		});
-		
+
 	}
 
 	private static final Executor DELAYER = CompletableFuture.delayedExecutor(10, TimeUnit.MILLISECONDS);
@@ -247,7 +240,7 @@ public class Database {
 		if(toReturn.isDone()) {
 			return;
 		}
-		
+
 		if(items.dispatchDepth() > 0 || queries.dispatchDepth() > 0) {
 			CompletableFuture[] all = new CompletableFuture[] {items.dispatch(), queries.dispatch()};
 			CompletableFuture.allOf(all).whenComplete((response, error) -> {
@@ -265,22 +258,22 @@ public class Database {
 			if(!allow) {
 				throw new ForbiddenWriteException("Link not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " + entity.getId());
 			}
-			
+
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-    		
+
     		for(String id: getLinkIds(entity, class1)) {
     			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, class1, id);
         		items.clear(key);
     		}
-    		
+
     		for(String id: targetIds) {
     			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, class1, id);
         		items.clear(key);
     		}
-    		
-    		
+
+
     		return driver.link(organisationId, entity, class1, targetIds);
 		});
 	}
@@ -288,12 +281,43 @@ public class Database {
 
 	public <T extends Table> CompletableFuture<T> link(T entity, Class<? extends Table> class1, String targetId) {
 		if(targetId == null) {
-			return links(entity, class1, Collections.emptyList());	
+			return links(entity, class1, Collections.emptyList());
 		}else {
 			return links(entity, class1, Arrays.asList(targetId));
 		}
 	}
-	
+
+	public <T extends Table> CompletableFuture<T> unlink(
+			final T entity,
+			final Class<? extends Table> clazz,
+			final String targetId
+	) {
+		return putAllow.apply(entity).thenCompose(allow -> {
+			if (!allow) {
+				throw new ForbiddenWriteException(
+						"Unlink not allowed for " + TableCoreUtil.table(entity.getClass()) + " with id " +
+						entity.getId());
+			}
+
+			var key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(
+					organisationId,
+					entity.getClass(),
+					entity.getId()
+			);
+			items.clear(key);
+			queries.clearAll();
+
+			for (final String id : getLinkIds(entity, clazz)) {
+				key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, clazz, id);
+				items.clear(key);
+			}
+
+			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, clazz, targetId);
+			items.clear(key);
+
+			return driver.unlink(organisationId, entity, clazz, targetId);
+		});
+	}
 
 	public <T extends Table> CompletableFuture<List<T>> get(Class<T> class1, List<String> ids) {
 		if(ids == null) {
@@ -320,5 +344,5 @@ public class Database {
 	public Set<String> getLinkIds(Table entity, Class<? extends Table> type) {
 		return Collections.unmodifiableSet(TableAccess.getTableLinks(entity).get(TableCoreUtil.table(type)));
 	}
-	
+
 }

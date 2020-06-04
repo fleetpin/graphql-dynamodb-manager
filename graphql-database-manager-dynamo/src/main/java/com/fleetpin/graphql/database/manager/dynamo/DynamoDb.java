@@ -30,7 +30,7 @@ import java.util.stream.Stream;
 
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
-public final class DynamoDb extends DatabaseDriver {
+public class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
     private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
     private static final int BATCH_WRITE_SIZE = 25;
@@ -537,6 +537,76 @@ public final class DynamoDb extends DatabaseDriver {
         });
     }
 
+    @Override
+    public <T extends Table> CompletableFuture<T> unlink(
+            final String organisationId,
+            final T entity,
+            final Class<? extends Table> clazz,
+            final String targetId
+    ) {
+        final var updateEntityLinksRequest = createRemoveLinkRequest(organisationId, entity, clazz, targetId);
+
+        return client.updateItem(updateEntityLinksRequest)
+                .thenCompose(ignore -> get(List.of(createDatabaseKey(organisationId, clazz, targetId))))
+                .thenCompose(targetEntities -> {
+                    if (targetEntities.isEmpty()) {
+                        throw new RuntimeException("Could not find link on the target: " + targetId);
+                    }
+
+                    final var updateTargetLinksRequest = createRemoveLinkRequest(
+                            organisationId,
+                            targetEntities.get(0),
+                            entity.getClass(),
+                            entity.getId()
+                    );
+
+                    return client.updateItem(updateTargetLinksRequest);
+                })
+                .thenApply(ignore -> {
+                    getLinks(entity).removeAll(table(clazz));
+
+                    return entity;
+                });
+    }
+
+    private <T extends Table> UpdateItemRequest createRemoveLinkRequest(
+            final String organisationId,
+            final T entity,
+            final Class<? extends Table> clazz,
+            final String targetId
+    ) {
+        final AttributeValue linkMap = AttributeValue.builder()
+                .m(getLinks(entity).asMap()
+                        .entrySet()
+                        .stream()
+                        .filter(entry -> !entry.getValue().contains(targetId) && !entry.getKey().equals(table(clazz)))
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey,
+                                entry -> {
+                                    final var linkedItem = entry.getValue()
+                                            .stream()
+                                            .map(item -> AttributeValue.builder().s(item).build())
+                                            .collect(Collectors.toList());
+
+                                    return AttributeValue.builder().l(linkedItem).build();
+                                }
+                        ))).build();
+
+        final var linksAttributeMap = Map.of(
+                "links", AttributeValueUpdate.builder().action(AttributeAction.PUT).value(linkMap).build()
+        );
+
+        final Map<String, AttributeValue> entityItem = Map.of(
+                "organisationId", AttributeValue.builder().s(organisationId).build(),
+                "id", AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build()
+        );
+
+        return UpdateItemRequest.builder()
+                .tableName(entityTable)
+                .key(entityItem)
+                .attributeUpdates(linksAttributeMap)
+                .build();
+    }
 
     public <T extends Table> CompletableFuture<T> deleteLinks(String organisationId, T entity) {
         var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
