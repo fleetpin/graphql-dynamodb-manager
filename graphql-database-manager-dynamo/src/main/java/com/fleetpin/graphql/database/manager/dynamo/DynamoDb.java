@@ -563,7 +563,7 @@ public class DynamoDb extends DatabaseDriver {
                     return client.updateItem(updateTargetLinksRequest);
                 })
                 .thenApply(ignore -> {
-                    getLinks(entity).removeAll(table(clazz));
+                    getLinks(entity).remove(table(clazz), targetId);
 
                     return entity;
                 });
