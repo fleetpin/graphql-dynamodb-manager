@@ -18,10 +18,8 @@ import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 final class DynamoDbLinkTest {
@@ -162,6 +160,28 @@ final class DynamoDbLinkTest {
 				putPineappleAmazingOrg.getId(),
 				db0.getLinks(putAlexBestOrg, AnotherTable.class).get().get(0).getId()
 		);
+	}
+
+	@TestDatabase
+	void unlink(final Database db) throws InterruptedException, ExecutionException {
+		var garry = db.put(new SimpleTable("garry")).get();
+		var bob = db.put(new AnotherTable("bob")).get();
+
+		db.link(garry, bob.getClass(), bob.getId()).get();
+
+		garry = db.get(SimpleTable.class, garry.getId()).get();
+		bob = db.get(AnotherTable.class, bob.getId()).get();
+
+		var bobLinks = db.getLink(bob, SimpleTable.class).get();
+		Assertions.assertEquals("garry", bobLinks.name);
+
+		var garryLink = db.getLink(garry, AnotherTable.class).get();
+		Assertions.assertEquals("bob", garryLink.getName());
+
+		db.unlink(garry, AnotherTable.class, bob.getId()).get();
+
+		var unlinked = db.getLink(garry, AnotherTable.class).get();
+		Assertions.assertNull(unlinked);
 	}
 
 	static class SimpleTable extends Table {

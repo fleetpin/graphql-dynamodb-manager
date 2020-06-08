@@ -39,6 +39,13 @@ public abstract class DatabaseDriver {
 
     public abstract <T extends Table> CompletableFuture<T> link(String organisationId, T entry, Class<? extends Table> class1, List<String> groupIds);
 
+    public abstract <T extends Table> CompletableFuture<T> unlink(
+            final String organisationId,
+            final T entity,
+            final Class<? extends Table> clazz,
+            final String targetId
+    );
+
     public abstract int maxBatchSize();
 
     public abstract String newId();
