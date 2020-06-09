@@ -592,7 +592,21 @@ public class DynamoDb extends DatabaseDriver {
                                 }
                         ))).build();
 
+        final var revisionNumber = entity.getRevision() != 0 ?
+                                   String.valueOf(entity.getRevision() + Integer.parseInt(REVISION_INCREMENT.n())) :
+                                   "0";
+
+        final var revision = AttributeValueUpdate.builder()
+                .action(AttributeAction.PUT)
+                .value(
+                        AttributeValue.builder()
+                                .n(revisionNumber)
+                                .build()
+                )
+                .build();
+
         final var linksAttributeMap = Map.of(
+                "revision", revision,
                 "links", AttributeValueUpdate.builder().action(AttributeAction.PUT).value(linkMap).build()
         );
 
