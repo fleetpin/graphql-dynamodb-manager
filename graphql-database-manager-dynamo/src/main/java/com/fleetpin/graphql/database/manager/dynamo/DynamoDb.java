@@ -582,14 +582,7 @@ public class DynamoDb extends DatabaseDriver {
                         .filter(entry -> !entry.getValue().contains(targetId) && !entry.getKey().equals(table(clazz)))
                         .collect(Collectors.toMap(
                                 Map.Entry::getKey,
-                                entry -> {
-                                    final var linkedItem = entry.getValue()
-                                            .stream()
-                                            .map(item -> AttributeValue.builder().s(item).build())
-                                            .collect(Collectors.toList());
-
-                                    return AttributeValue.builder().l(linkedItem).build();
-                                }
+                                entry -> AttributeValue.builder().ss(entry.getValue()).build()
                         ))).build();
 
         // It would be nice to pull the revision logic out
