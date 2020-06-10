@@ -592,6 +592,7 @@ public class DynamoDb extends DatabaseDriver {
                                 }
                         ))).build();
 
+        // It would be nice to pull the revision logic out
         final var revisionNumber = entity.getRevision() != 0 ?
                                    String.valueOf(entity.getRevision() + Integer.parseInt(REVISION_INCREMENT.n())) :
                                    "0";
