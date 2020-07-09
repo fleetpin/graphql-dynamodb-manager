@@ -43,8 +43,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 				this.links.putAll(t, value.ss());
 			});
 		}
-		String id = item.get("id").s();
-		this.id = id.substring(id.indexOf(':') + 1);
+		this.id = item.get("id").s();
 		
 		this.organisationId = item.get("organisationId").s();
 	}
