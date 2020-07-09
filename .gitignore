@@ -5,3 +5,4 @@ target
 native-libs
 .idea
 *.iml
+bin

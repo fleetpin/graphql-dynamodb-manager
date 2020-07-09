@@ -219,7 +219,7 @@ public class DynamoDb extends DatabaseDriver {
             var toReturn = new ArrayList<T>();
             for (var key : keys) {
 
-                var item = flattener.get(key.getId());
+                var item = flattener.get(key.getType(), key.getId());
                 if (item == null) {
                     toReturn.add(null);
                 } else {

@@ -218,6 +218,28 @@ final class DynamoDbPutGetDeleteTest {
 		final var janeWasDeleted = db.get(SimpleTable.class, janeGetEntry.getId()).get();
 		Assertions.assertNull(janeWasDeleted);
 	}
+	
+	@TestDatabase
+	void testSameIdDifferentTypes(final Database db) throws InterruptedException, ExecutionException {
+		SimpleTable entry1 = new SimpleTable("garry");
+		SimpleTable2 entry2 = new SimpleTable2("bob");
+		entry1.setId("iamthesame");
+		entry2.setId("iamthesame");
+		entry1 = db.put(entry1).get();
+		entry2 = db.put(entry2).get();
+		Assertions.assertEquals("garry", entry1.getName());
+		Assertions.assertNotNull(entry1.getId());
+		
+		String id = entry1.getId();		
+		
+		var entry1Future = db.get(SimpleTable.class, id);
+		var entry2Future = db.get(SimpleTable2.class, id);
+		
+		Assertions.assertEquals("garry", entry1Future.get().getName());
+		Assertions.assertEquals("bob", entry2Future.get().getName());
+	}
+	
+	
 
 	static class SimpleTable extends Table {
 		private String name;
@@ -226,6 +248,21 @@ final class DynamoDbPutGetDeleteTest {
 		}
 
 		public SimpleTable(String name) {
+			this.name = name;
+		}
+
+		public String getName() {
+			return name;
+		}
+	}
+	
+	static class SimpleTable2 extends Table {
+		private String name;
+
+		public SimpleTable2() {
+		}
+
+		public SimpleTable2(String name) {
 			this.name = name;
 		}
 
