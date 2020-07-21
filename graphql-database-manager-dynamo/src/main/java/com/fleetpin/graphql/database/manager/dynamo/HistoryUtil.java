@@ -3,7 +3,6 @@ package com.fleetpin.graphql.database.manager.dynamo;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 
@@ -34,8 +33,6 @@ public class HistoryUtil {
 				var startsUpdatedAt = DynamoDb.toUpdatedAtId(id[1], Instant.parse(newImage.get("item").m().get("updatedAt").s()).toEpochMilli(), true);
 				item.put("startsWithUpdatedAt", startsUpdatedAt);
 
-				//client.putItem(builder -> builder.item(item).tableName(table+"_history")).get();//need fix and check what's going on here
-				//System.out.println(item);
 				return item;
 
 			} else {

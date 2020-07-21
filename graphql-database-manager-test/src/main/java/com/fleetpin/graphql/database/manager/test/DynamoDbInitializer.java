@@ -72,14 +72,7 @@ final class DynamoDbInitializer {
                                 AttributeDefinition.builder().attributeName("secondaryGlobal").attributeType(ScalarAttributeType.S).build(),
                                 AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build()
                         ).provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
-        ).get();
-        
-        //TODO: build history history table no change stream in history table
-        //TODO:flag to enable history on a type @CaptureHistory??
-        //TODO: subscribe from change stream in main table and write entries to history table
-        //TODO: code to take a stream event and convernt to the write to history table should be in its own module. 
-        //that also has a lambda to perform task
-        
+        ).get();        
     }
     
     static void createHistoryTable(final DynamoDbAsyncClient client, final String name) throws ExecutionException, InterruptedException {

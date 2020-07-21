@@ -276,28 +276,6 @@ public class DynamoDb extends DatabaseDriver {
         var builder = 	QueryRequest.builder();
         builder.tableName(historyTable);
         
-        
-        /****
-        var idAttribute = AttributeValue.builder().s(id).build();
-
-        Map<String, AttributeValue> keyConditions = new HashMap<>();
-        keyConditions.put(":" + secondaryIndex, idAttribute);
-        keyConditions.put(":organisationIdType", organisationIdType);
-        
-        System.out.println(keyConditions);
-
-        var toReturn = new ArrayList<T>();
-        return client.queryPaginator(r -> r.tableName(historyTable)
-                .keyConditionExpression("organisationIdType = :organisationIdType AND " + secondaryIndex + " = :" + secondaryIndex)
-                .expressionAttributeValues(keyConditions)
-                .applyMutation(mutator -> {
-                	if(useIndex) {
-                		mutator.indexName(secondaryIndex);
-                	}
-                })
-        ****/
-        
-
     	if(queryHistory.getId() != null) {
     		var id = queryHistory.getId();
     		if(queryHistory.getFromRevision() != null && queryHistory.getToRevision() != null) {
@@ -311,6 +289,7 @@ public class DynamoDb extends DatabaseDriver {
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions);
+    			
     		} else if (queryHistory.getFromRevision() != null) {
     			var fromIdAttribute = toRevisionId(id, queryHistory.getFromRevision());
                 var toIdAttribute = toRevisionId(id, Long.MAX_VALUE);
@@ -322,6 +301,7 @@ public class DynamoDb extends DatabaseDriver {
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions);
+    			
     		} else if (queryHistory.getToRevision() != null) {
     			var fromIdAttribute = toRevisionId(id, 0L);
                 var toIdAttribute = toRevisionId(id, queryHistory.getToRevision());
@@ -333,6 +313,7 @@ public class DynamoDb extends DatabaseDriver {
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions);
+    			
     		} else if (queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null) {
     			var fromIdAttribute = toRevisionId(id, queryHistory.getFromUpdatedAt().toEpochMilli());
                 var toIdAttribute = toRevisionId(id, queryHistory.getToUpdatedAt().toEpochMilli());
@@ -344,6 +325,7 @@ public class DynamoDb extends DatabaseDriver {
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions).indexName("idDate");
+    			
     		}  else if (queryHistory.getFromUpdatedAt() != null) {
     			var fromIdAttribute = toRevisionId(id, queryHistory.getFromUpdatedAt().toEpochMilli());
                 var toIdAttribute = toRevisionId(id, Long.MAX_VALUE);
@@ -355,6 +337,7 @@ public class DynamoDb extends DatabaseDriver {
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions).indexName("idDate");
+    			
     		} else if (queryHistory.getToUpdatedAt() != null) {
     			var fromIdAttribute = toRevisionId(id, 0L);
                 var toIdAttribute = toRevisionId(id, queryHistory.getToUpdatedAt().toEpochMilli());
@@ -366,6 +349,7 @@ public class DynamoDb extends DatabaseDriver {
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions).indexName("idDate");
+    			
     		} else {
 
                 var idAttribute = toId(id);
@@ -376,38 +360,28 @@ public class DynamoDb extends DatabaseDriver {
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND begins_with (idRevision, :id)")
                 .expressionAttributeValues(keyConditions);
+    			
     		}
     	}else {
-    		//TODO： funny join (z-order)
-    		//abc 123 = a1b2c300000...0  
-    		//abc 1234 = a1b2c304....0
-    		//abcd 123 = a1b2c3d0....0
-    		//ab 12345 = a1b2030405...0
-    		//ab0 1230
-    		// abc000fhasdkhjf 1001 -> a1b0c001.... => 1001001001... 
-    		// do bytes first -> join
-    		
-    		// filter id/startswith
-    		// filter between date
     		var starts = queryHistory.getStartsWith();
+    		var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
     		if ( queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null ) {    		
-			var fromIdAttribute = toUpdatedAtId(starts, queryHistory.getFromUpdatedAt().toEpochMilli(), true);
-            var toIdAttribute = toUpdatedAtId(starts, queryHistory.getToUpdatedAt().toEpochMilli(), false);
-	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-	        keyConditions.put(":fromId", fromIdAttribute);
-	        keyConditions.put(":toId", toIdAttribute);
-	        keyConditions.put(":organisationIdType", organisationIdType);
-	        
-	        var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
-	        //table:xxxxx
-	        keyConditions.put(":idStarts", idStarts);
-	        
-	        keyConditions.put(":fromUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build());
-	        keyConditions.put(":toUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build());
-
-			builder
-			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
-            .expressionAttributeValues(keyConditions).indexName("startsWithUpdatedAt").filterExpression("updatedAt BETWEEN :fromUpdatedAt AND :toUpdatedAt AND begins_with (id, :idStarts)");
+				var fromIdAttribute = toUpdatedAtId(starts, queryHistory.getFromUpdatedAt().toEpochMilli(), true);
+	            var toIdAttribute = toUpdatedAtId(starts, queryHistory.getToUpdatedAt().toEpochMilli(), false);
+		        Map<String, AttributeValue> keyConditions = new HashMap<>();
+		        keyConditions.put(":fromId", fromIdAttribute);
+		        keyConditions.put(":toId", toIdAttribute);
+		        keyConditions.put(":organisationIdType", organisationIdType);
+		        
+		        var fromUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build();
+		        var toUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build();
+		        keyConditions.put(":idStarts", idStarts);
+		        keyConditions.put(":fromUpdatedAt", fromUpdatedAt);
+		        keyConditions.put(":toUpdatedAt", toUpdatedAt);
+	
+				builder
+				.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
+	            .expressionAttributeValues(keyConditions).indexName("startsWithUpdatedAt").filterExpression("updatedAt BETWEEN :fromUpdatedAt AND :toUpdatedAt AND begins_with (id, :idStarts)");
     		} else if (queryHistory.getFromUpdatedAt() != null ) {
     			var fromIdAttribute = toUpdatedAtId(starts, queryHistory.getFromUpdatedAt().toEpochMilli(), true);
                 var toIdAttribute = toUpdatedAtId(starts, Long.MAX_VALUE, false);
@@ -416,11 +390,9 @@ public class DynamoDb extends DatabaseDriver {
     	        keyConditions.put(":toId", toIdAttribute);
     	        keyConditions.put(":organisationIdType", organisationIdType);
     	        
-    	        var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
-    	        //table:xxxxx
+    	        var fromUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build();
     	        keyConditions.put(":idStarts", idStarts);
-    	        
-    	        keyConditions.put(":fromUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build());
+    	        keyConditions.put(":fromUpdatedAt", fromUpdatedAt);
 
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
@@ -433,11 +405,9 @@ public class DynamoDb extends DatabaseDriver {
     	        keyConditions.put(":toId", toIdAttribute);
     	        keyConditions.put(":organisationIdType", organisationIdType);
     	        
-    	        var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
-    	        //table:xxxxx
+    	        var toUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build();
     	        keyConditions.put(":idStarts", idStarts);
-    	        
-    	        keyConditions.put(":toUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build());
+    	        keyConditions.put(":toUpdatedAt", toUpdatedAt);
 
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")

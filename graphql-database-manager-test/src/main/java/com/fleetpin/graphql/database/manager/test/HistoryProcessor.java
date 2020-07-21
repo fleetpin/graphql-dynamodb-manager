@@ -44,21 +44,19 @@ public class HistoryProcessor {
         this.streamClient = streamClient;
 	}
 	
-	public void process() { //we need to split this out so it doesn't start again. (not need to re-establish connect everytime)
+	public void process() {
 		try {
 			for (final String table : tables) {
 				
 				
 				var streamArn = client.describeTable(builder -> builder.tableName(table).build()).get().table()
 						.latestStreamArn();
-				//streamClient.getShardIterator(builder -> builder.)
+
 				var shards = streamClient.describeStream(builder -> builder.streamArn(streamArn).build()).get()
 						.streamDescription().shards();
 		        for (final var shard : shards) {
 		        	var shardIterator = streamClient.getShardIterator(builder -> builder.shardIteratorType(ShardIteratorType.TRIM_HORIZON).streamArn(streamArn).shardId(shard.shardId())).get().shardIterator();
 		        	var response = streamClient.getRecords(builder -> builder.shardIterator(shardIterator)).get();
-		        	// response tell us where we stop read last time, we should start read the next from here
-		        	//System.out.println("response: " + response.records());
 		        	var stream = HistoryUtil.toHistoryValue(response.records());
 		        	
 		        	var items = new HashMap<String, List<WriteRequest>>();
