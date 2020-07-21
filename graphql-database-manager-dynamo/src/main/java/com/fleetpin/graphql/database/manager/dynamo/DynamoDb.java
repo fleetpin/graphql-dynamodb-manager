@@ -18,9 +18,14 @@ import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
+import com.google.common.primitives.UnsignedBytes;
+
+import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -36,14 +41,18 @@ public class DynamoDb extends DatabaseDriver {
     private static final int BATCH_WRITE_SIZE = 25;
 
     private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
+    private final String historyTable;
     private final String entityTable;
     private final DynamoDbAsyncClient client;
     private final ObjectMapper mapper;
     private final Supplier<String> idGenerator;
-
     public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
+    	this(mapper, entityTables, null, client, idGenerator);
+    }
+    public DynamoDb(ObjectMapper mapper, List<String> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
         this.mapper = mapper;
         this.entityTables = entityTables;
+        this.historyTable = historyTable;
         this.entityTable = entityTables.get(entityTables.size() - 1);
         this.client = client;
         this.idGenerator = idGenerator;
@@ -258,6 +267,250 @@ public class DynamoDb extends DatabaseDriver {
             return flattener.results(mapper, key.getQuery().getType(), Optional.ofNullable(key.getQuery().getLimit()));
         });
     }
+    
+    @Override
+    public <T extends Table> CompletableFuture<List<T>> queryHistory(DatabaseQueryHistoryKey<T> key) {
+    	var queryHistory = key.getQueryHistory();
+        var organisationIdType  = AttributeValue.builder().s(key.getOrganisationId() + ":" + table(queryHistory.getType())).build();
+       
+        var builder = 	QueryRequest.builder();
+        builder.tableName(historyTable);
+        
+        
+        /****
+        var idAttribute = AttributeValue.builder().s(id).build();
+
+        Map<String, AttributeValue> keyConditions = new HashMap<>();
+        keyConditions.put(":" + secondaryIndex, idAttribute);
+        keyConditions.put(":organisationIdType", organisationIdType);
+        
+        System.out.println(keyConditions);
+
+        var toReturn = new ArrayList<T>();
+        return client.queryPaginator(r -> r.tableName(historyTable)
+                .keyConditionExpression("organisationIdType = :organisationIdType AND " + secondaryIndex + " = :" + secondaryIndex)
+                .expressionAttributeValues(keyConditions)
+                .applyMutation(mutator -> {
+                	if(useIndex) {
+                		mutator.indexName(secondaryIndex);
+                	}
+                })
+        ****/
+        
+
+    	if(queryHistory.getId() != null) {
+    		var id = queryHistory.getId();
+    		if(queryHistory.getFromRevision() != null && queryHistory.getToRevision() != null) {
+    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromRevision());
+                var toIdAttribute = toRevisionId(id, queryHistory.getToRevision());
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions);
+    		} else if (queryHistory.getFromRevision() != null) {
+    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromRevision());
+                var toIdAttribute = toRevisionId(id, Long.MAX_VALUE);
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions);
+    		} else if (queryHistory.getToRevision() != null) {
+    			var fromIdAttribute = toRevisionId(id, 0L);
+                var toIdAttribute = toRevisionId(id, queryHistory.getToRevision());
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions);
+    		} else if (queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null) {
+    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromUpdatedAt().toEpochMilli());
+                var toIdAttribute = toRevisionId(id, queryHistory.getToUpdatedAt().toEpochMilli());
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions).indexName("idDate");
+    		}  else if (queryHistory.getFromUpdatedAt() != null) {
+    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromUpdatedAt().toEpochMilli());
+                var toIdAttribute = toRevisionId(id, Long.MAX_VALUE);
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions).indexName("idDate");
+    		} else if (queryHistory.getToUpdatedAt() != null) {
+    			var fromIdAttribute = toRevisionId(id, 0L);
+                var toIdAttribute = toRevisionId(id, queryHistory.getToUpdatedAt().toEpochMilli());
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions).indexName("idDate");
+    		} else {
+
+                var idAttribute = toId(id);
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":id", idAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND begins_with (idRevision, :id)")
+                .expressionAttributeValues(keyConditions);
+    		}
+    	}else {
+    		//TODO： funny join (z-order)
+    		//abc 123 = a1b2c300000...0  
+    		//abc 1234 = a1b2c304....0
+    		//abcd 123 = a1b2c3d0....0
+    		//ab 12345 = a1b2030405...0
+    		//ab0 1230
+    		// abc000fhasdkhjf 1001 -> a1b0c001.... => 1001001001... 
+    		// do bytes first -> join
+    		
+    		// filter id/startswith
+    		// filter between date
+    		var starts = queryHistory.getStartsWith();
+    		if ( queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null ) {    		
+			var fromIdAttribute = toUpdatedAtId(starts, queryHistory.getFromUpdatedAt().toEpochMilli(), true);
+            var toIdAttribute = toUpdatedAtId(starts, queryHistory.getToUpdatedAt().toEpochMilli(), false);
+	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+	        keyConditions.put(":fromId", fromIdAttribute);
+	        keyConditions.put(":toId", toIdAttribute);
+	        keyConditions.put(":organisationIdType", organisationIdType);
+	        
+	        var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
+	        //table:xxxxx
+	        keyConditions.put(":idStarts", idStarts);
+	        
+	        keyConditions.put(":fromUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build());
+	        keyConditions.put(":toUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build());
+
+			builder
+			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
+            .expressionAttributeValues(keyConditions).indexName("startsWithUpdatedAt").filterExpression("updatedAt BETWEEN :fromUpdatedAt AND :toUpdatedAt AND begins_with (id, :idStarts)");
+    		} else if (queryHistory.getFromUpdatedAt() != null ) {
+    			var fromIdAttribute = toUpdatedAtId(starts, queryHistory.getFromUpdatedAt().toEpochMilli(), true);
+                var toIdAttribute = toUpdatedAtId(starts, Long.MAX_VALUE, false);
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+    	        
+    	        var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
+    	        //table:xxxxx
+    	        keyConditions.put(":idStarts", idStarts);
+    	        
+    	        keyConditions.put(":fromUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build());
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions).indexName("startsWithUpdatedAt").filterExpression("updatedAt >= :fromUpdatedAt AND begins_with (id, :idStarts)");
+    		} else if (queryHistory.getToUpdatedAt() != null ) {
+    			var fromIdAttribute = toUpdatedAtId(starts, 0L, true);
+                var toIdAttribute = toUpdatedAtId(starts, queryHistory.getToUpdatedAt().toEpochMilli(), false);
+    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
+    	        keyConditions.put(":fromId", fromIdAttribute);
+    	        keyConditions.put(":toId", toIdAttribute);
+    	        keyConditions.put(":organisationIdType", organisationIdType);
+    	        
+    	        var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
+    	        //table:xxxxx
+    	        keyConditions.put(":idStarts", idStarts);
+    	        
+    	        keyConditions.put(":toUpdatedAt", AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build());
+
+    			builder
+    			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
+                .expressionAttributeValues(keyConditions).indexName("startsWithUpdatedAt").filterExpression("updatedAt <= :toUpdatedAt AND begins_with (id, :idStarts)");
+    		}
+    	}
+        
+        var toReturn = new ArrayList<T>();
+        return client.queryPaginator(builder.build())
+        .subscribe(response -> {
+            response.items().forEach(item -> toReturn.add(new DynamoItem(historyTable, item).convertTo(mapper, queryHistory.getType())));
+        }).thenApply(__ -> {
+            return toReturn;
+        });
+    }
+    
+	private AttributeValue toId(String id) {
+		var idBytes = (id+":").getBytes(StandardCharsets.UTF_8);
+		var idBuffer = ByteBuffer.allocate(idBytes.length);
+		idBuffer.put(idBytes);
+		idBuffer.flip();
+		
+		var idAttribute = AttributeValue.builder().b(SdkBytes.fromByteBuffer(idBuffer)).build();
+		return idAttribute;
+	}
+    
+	public static AttributeValue toRevisionId(String id, Long revision) {
+		var idBytes = (id+":").getBytes(StandardCharsets.UTF_8);
+		var revisionId = ByteBuffer.allocate(idBytes.length+Long.BYTES);
+		revisionId.put(idBytes);
+		revisionId.putLong(revision);
+		revisionId.flip();
+		
+		var revisionIdAttribute = AttributeValue.builder().b(SdkBytes.fromByteBuffer(revisionId)).build();
+		return revisionIdAttribute;
+	}
+	
+	public static AttributeValue toUpdatedAtId(String starts, Long updatedAt, Boolean from) {
+		var idBytes = ByteBuffer.wrap(starts.getBytes(StandardCharsets.UTF_8));
+		var date = ByteBuffer.allocate(Long.BYTES);	
+		date.putLong(updatedAt);
+		date.flip();
+		
+		var updatedAtId = ByteBuffer.allocate(Math.max(idBytes.capacity(), date.capacity()) + date.capacity()); 
+		
+		if (idBytes.capacity() < date.capacity()) {
+			for (int i = 0; i < date.capacity(); i++) {
+				if (i < idBytes.capacity()) {
+					updatedAtId.put(idBytes.get());
+					updatedAtId.put(date.get());
+				} else {
+					if (from) {
+						updatedAtId.put((byte) 0);
+					} else {
+						updatedAtId.put(UnsignedBytes.MAX_VALUE);
+					}
+					updatedAtId.put(date.get());
+				}
+			}
+		} else {
+			for (int i = 0; i < date.capacity(); i++) {
+				updatedAtId.put(idBytes.get());
+				updatedAtId.put(date.get());
+			}
+			for (int i = date.capacity(); i < idBytes.capacity(); i++) {
+				updatedAtId.put(idBytes.get());
+			}
+		}
+		
+		updatedAtId.flip();
+		var updatedAtIdAttribute = AttributeValue.builder().b(SdkBytes.fromByteBuffer(updatedAtId)).build();
+		return updatedAtIdAttribute;
+	}
 
     @Override
     public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value) {

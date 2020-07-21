@@ -34,6 +34,7 @@ public class Database {
 
 	private final TableDataLoader<DatabaseKey<Table>> items;
 	private final TableDataLoader<DatabaseQueryKey<Table>> queries;
+	private final TableDataLoader<DatabaseQueryHistoryKey<Table>> queryHistories;
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 
@@ -49,6 +50,10 @@ public class Database {
 		queries = new TableDataLoader<>(new DataLoader<DatabaseQueryKey<Table>, List<Table>>(keys -> {
 			return merge(keys.stream().map(key -> driver.query(key)));
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
+		
+		queryHistories = new TableDataLoader<>(new DataLoader<DatabaseQueryHistoryKey<Table>, List<Table>>(keys -> {
+			return merge(keys.stream().map(key -> driver.queryHistory(key)));
+		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type, Function<QueryBuilder<T>, QueryBuilder<T>> func) {
@@ -58,6 +63,13 @@ public class Database {
 	public <T extends Table> CompletableFuture<List<T>> query(Query<T> query) {
 		DatabaseQueryKey<Table> key = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, query);
 		CompletableFuture<List<T>> toReturn = queries.load(key);
+		return toReturn
+				.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toList()));
+	}
+	
+	public <T extends Table> CompletableFuture<List<T>> queryHistory(QueryHistory<T> queryHistory) {
+		DatabaseQueryHistoryKey<Table> key = (DatabaseQueryHistoryKey<Table>) KeyFactory.createDatabaseQueryHistoryKey(organisationId, queryHistory);
+		CompletableFuture<List<T>> toReturn = queryHistories.load(key);
 		return toReturn
 				.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toList()));
 	}
@@ -241,8 +253,8 @@ public class Database {
 			return;
 		}
 
-		if(items.dispatchDepth() > 0 || queries.dispatchDepth() > 0) {
-			CompletableFuture[] all = new CompletableFuture[] {items.dispatch(), queries.dispatch()};
+		if(items.dispatchDepth() > 0 || queries.dispatchDepth() > 0 || queryHistories.dispatchDepth() > 0) {
+			CompletableFuture[] all = new CompletableFuture[] {items.dispatch(), queries.dispatch(), queryHistories.dispatch()};
 			CompletableFuture.allOf(all).whenComplete((response, error) -> {
 				//go around again
 				start(toReturn);

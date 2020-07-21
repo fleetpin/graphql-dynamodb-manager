@@ -15,4 +15,10 @@ public interface KeyFactory {
     ) {
         return new DatabaseQueryKey<>(organisationId, query);
     }
+
+	static <T extends Table> DatabaseQueryHistoryKey<T> createDatabaseQueryHistoryKey(String organisationId,
+			QueryHistory<T> queryHistory) {
+		
+		return new DatabaseQueryHistoryKey<>(organisationId, queryHistory);
+	}
 }

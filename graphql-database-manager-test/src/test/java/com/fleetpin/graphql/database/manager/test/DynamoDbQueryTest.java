@@ -38,7 +38,7 @@ final class DynamoDbQueryTest {
 		Assertions.assertEquals("garry", entries.get(2).name);
 	}
 
-	@TestDatabase
+	@TestDatabase()
 	void testTwoTablesQuery(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
