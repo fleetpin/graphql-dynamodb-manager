@@ -278,74 +278,18 @@ public class DynamoDb extends DatabaseDriver {
         
     	if(queryHistory.getId() != null) {
     		var id = queryHistory.getId();
-    		if(queryHistory.getFromRevision() != null && queryHistory.getToRevision() != null) {
-    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromRevision());
-                var toIdAttribute = toRevisionId(id, queryHistory.getToRevision());
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-
+    		if (queryHistory.getFromRevision() != null || queryHistory.getToRevision() != null) {
+                var from = queryHistory.getFromRevision() != null ? queryHistory.getFromRevision() : 0L;
+                var to = queryHistory.getToRevision() != null ? queryHistory.getToRevision() : Long.MAX_VALUE;
+    			var keyConditions = idWithFromTo(id, from, to, organisationIdType);
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions);
     			
-    		} else if (queryHistory.getFromRevision() != null) {
-    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromRevision());
-                var toIdAttribute = toRevisionId(id, Long.MAX_VALUE);
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-
-    			builder
-    			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
-                .expressionAttributeValues(keyConditions);
-    			
-    		} else if (queryHistory.getToRevision() != null) {
-    			var fromIdAttribute = toRevisionId(id, 0L);
-                var toIdAttribute = toRevisionId(id, queryHistory.getToRevision());
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-
-    			builder
-    			.keyConditionExpression("organisationIdType = :organisationIdType AND idRevision BETWEEN :fromId  AND :toId")
-                .expressionAttributeValues(keyConditions);
-    			
-    		} else if (queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null) {
-    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromUpdatedAt().toEpochMilli());
-                var toIdAttribute = toRevisionId(id, queryHistory.getToUpdatedAt().toEpochMilli());
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-
-    			builder
-    			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
-                .expressionAttributeValues(keyConditions).indexName("idDate");
-    			
-    		}  else if (queryHistory.getFromUpdatedAt() != null) {
-    			var fromIdAttribute = toRevisionId(id, queryHistory.getFromUpdatedAt().toEpochMilli());
-                var toIdAttribute = toRevisionId(id, Long.MAX_VALUE);
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-
-    			builder
-    			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
-                .expressionAttributeValues(keyConditions).indexName("idDate");
-    			
-    		} else if (queryHistory.getToUpdatedAt() != null) {
-    			var fromIdAttribute = toRevisionId(id, 0L);
-                var toIdAttribute = toRevisionId(id, queryHistory.getToUpdatedAt().toEpochMilli());
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-
+    		} else if (queryHistory.getFromUpdatedAt() != null || queryHistory.getToUpdatedAt() != null) {
+                var from = queryHistory.getFromUpdatedAt() != null ? queryHistory.getFromUpdatedAt().toEpochMilli() : 0L;
+                var to = queryHistory.getToUpdatedAt() != null ? queryHistory.getToUpdatedAt().toEpochMilli() : Long.MAX_VALUE;
+                var keyConditions = idWithFromTo(id, from, to, organisationIdType);
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND idDate BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions).indexName("idDate");
@@ -366,48 +310,28 @@ public class DynamoDb extends DatabaseDriver {
     		var starts = queryHistory.getStartsWith();
     		var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
     		if ( queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null ) {    		
-				var fromIdAttribute = toUpdatedAtId(starts, queryHistory.getFromUpdatedAt().toEpochMilli(), true);
-	            var toIdAttribute = toUpdatedAtId(starts, queryHistory.getToUpdatedAt().toEpochMilli(), false);
-		        Map<String, AttributeValue> keyConditions = new HashMap<>();
-		        keyConditions.put(":fromId", fromIdAttribute);
-		        keyConditions.put(":toId", toIdAttribute);
-		        keyConditions.put(":organisationIdType", organisationIdType);
-		        
-		        var fromUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build();
-		        var toUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build();
+                var from = queryHistory.getFromUpdatedAt().toEpochMilli();
+                var to = queryHistory.getToUpdatedAt().toEpochMilli();
+                var keyConditions = startsWithFromTo(starts, from, to, organisationIdType, "between");
 		        keyConditions.put(":idStarts", idStarts);
-		        keyConditions.put(":fromUpdatedAt", fromUpdatedAt);
-		        keyConditions.put(":toUpdatedAt", toUpdatedAt);
-	
+
 				builder
 				.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
 	            .expressionAttributeValues(keyConditions).indexName("startsWithUpdatedAt").filterExpression("updatedAt BETWEEN :fromUpdatedAt AND :toUpdatedAt AND begins_with (id, :idStarts)");
     		} else if (queryHistory.getFromUpdatedAt() != null ) {
-    			var fromIdAttribute = toUpdatedAtId(starts, queryHistory.getFromUpdatedAt().toEpochMilli(), true);
-                var toIdAttribute = toUpdatedAtId(starts, Long.MAX_VALUE, false);
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-    	        
-    	        var fromUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getFromUpdatedAt().toEpochMilli())).build();
+                var from = queryHistory.getFromUpdatedAt().toEpochMilli();
+                var to = Long.MAX_VALUE;
+                var keyConditions = startsWithFromTo(starts, from, to, organisationIdType, "from");
     	        keyConditions.put(":idStarts", idStarts);
-    	        keyConditions.put(":fromUpdatedAt", fromUpdatedAt);
 
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
                 .expressionAttributeValues(keyConditions).indexName("startsWithUpdatedAt").filterExpression("updatedAt >= :fromUpdatedAt AND begins_with (id, :idStarts)");
     		} else if (queryHistory.getToUpdatedAt() != null ) {
-    			var fromIdAttribute = toUpdatedAtId(starts, 0L, true);
-                var toIdAttribute = toUpdatedAtId(starts, queryHistory.getToUpdatedAt().toEpochMilli(), false);
-    	        Map<String, AttributeValue> keyConditions = new HashMap<>();
-    	        keyConditions.put(":fromId", fromIdAttribute);
-    	        keyConditions.put(":toId", toIdAttribute);
-    	        keyConditions.put(":organisationIdType", organisationIdType);
-    	        
-    	        var toUpdatedAt = AttributeValue.builder().n(Long.toString(queryHistory.getToUpdatedAt().toEpochMilli())).build();
+                var from = 0L;
+                var to = queryHistory.getToUpdatedAt().toEpochMilli();
+                var keyConditions = startsWithFromTo(starts, from, to, organisationIdType, "to");
     	        keyConditions.put(":idStarts", idStarts);
-    	        keyConditions.put(":toUpdatedAt", toUpdatedAt);
 
     			builder
     			.keyConditionExpression("organisationIdType = :organisationIdType AND startsWithUpdatedAt BETWEEN :fromId  AND :toId")
@@ -422,6 +346,39 @@ public class DynamoDb extends DatabaseDriver {
         }).thenApply(__ -> {
             return toReturn;
         });
+    }
+    
+    private Map<String, AttributeValue> idWithFromTo(String id, Long from, Long to, AttributeValue organisationIdType) {
+		var fromIdAttribute = toRevisionId(id, from);
+        var toIdAttribute = toRevisionId(id, to);
+        Map<String, AttributeValue> keyConditions = new HashMap<>();
+        keyConditions.put(":fromId", fromIdAttribute);
+        keyConditions.put(":toId", toIdAttribute);
+        keyConditions.put(":organisationIdType", organisationIdType);
+    	return keyConditions;
+    }
+    
+    private Map<String, AttributeValue> startsWithFromTo(String starts, Long from, Long to, AttributeValue organisationIdType, String type) {
+		var fromIdAttribute = toUpdatedAtId(starts, from, true);
+        var toIdAttribute = toUpdatedAtId(starts, to, false);
+        Map<String, AttributeValue> keyConditions = new HashMap<>();
+        keyConditions.put(":fromId", fromIdAttribute);
+        keyConditions.put(":toId", toIdAttribute);
+        keyConditions.put(":organisationIdType", organisationIdType);
+        
+        var fromUpdatedAt = AttributeValue.builder().n(Long.toString(from)).build();
+        var toUpdatedAt = AttributeValue.builder().n(Long.toString(to)).build();
+        
+        if (type == "between") {
+            keyConditions.put(":fromUpdatedAt", fromUpdatedAt);
+            keyConditions.put(":toUpdatedAt", toUpdatedAt);
+        } else if (type == "from") {
+        	keyConditions.put(":fromUpdatedAt", fromUpdatedAt);
+        } else if (type == "to") {
+        	keyConditions.put(":toUpdatedAt", toUpdatedAt);
+        }
+
+    	return keyConditions;
     }
     
 	private AttributeValue toId(String id) {
