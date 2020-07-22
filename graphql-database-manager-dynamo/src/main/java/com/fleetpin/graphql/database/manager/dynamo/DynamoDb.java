@@ -315,7 +315,7 @@ public class DynamoDb extends DatabaseDriver {
 			
 		} else {
 
-            var idAttribute = toId(id);
+            var idAttribute = HistoryUtil.toId(id);
 	        Map<String, AttributeValue> keyConditions = new HashMap<>();
 	        keyConditions.put(":id", idAttribute);
 	        keyConditions.put(":organisationIdType", organisationIdType);
@@ -365,8 +365,8 @@ public class DynamoDb extends DatabaseDriver {
     }
     
     private Map<String, AttributeValue> idWithFromTo(String id, Long from, Long to, AttributeValue organisationIdType) {
-		var fromIdAttribute = toRevisionId(id, from);
-        var toIdAttribute = toRevisionId(id, to);
+		var fromIdAttribute = HistoryUtil.toRevisionId(id, from);
+        var toIdAttribute = HistoryUtil.toRevisionId(id, to);
         Map<String, AttributeValue> keyConditions = new HashMap<>();
         keyConditions.put(":fromId", fromIdAttribute);
         keyConditions.put(":toId", toIdAttribute);
@@ -375,8 +375,8 @@ public class DynamoDb extends DatabaseDriver {
     }
     
     private Map<String, AttributeValue> startsWithFromTo(String starts, Long from, Long to, AttributeValue organisationIdType, String type) {
-		var fromIdAttribute = toUpdatedAtId(starts, from, true);
-        var toIdAttribute = toUpdatedAtId(starts, to, false);
+		var fromIdAttribute = HistoryUtil.toUpdatedAtId(starts, from, true);
+        var toIdAttribute = HistoryUtil.toUpdatedAtId(starts, to, false);
         Map<String, AttributeValue> keyConditions = new HashMap<>();
         keyConditions.put(":fromId", fromIdAttribute);
         keyConditions.put(":toId", toIdAttribute);
@@ -397,63 +397,6 @@ public class DynamoDb extends DatabaseDriver {
     	return keyConditions;
     }
     
-	private AttributeValue toId(String id) {
-		var idBytes = (id+":").getBytes(StandardCharsets.UTF_8);
-		var idBuffer = ByteBuffer.allocate(idBytes.length);
-		idBuffer.put(idBytes);
-		idBuffer.flip();
-		
-		var idAttribute = AttributeValue.builder().b(SdkBytes.fromByteBuffer(idBuffer)).build();
-		return idAttribute;
-	}
-    
-	public static AttributeValue toRevisionId(String id, Long revision) {
-		var idBytes = (id+":").getBytes(StandardCharsets.UTF_8);
-		var revisionId = ByteBuffer.allocate(idBytes.length+Long.BYTES);
-		revisionId.put(idBytes);
-		revisionId.putLong(revision);
-		revisionId.flip();
-		
-		var revisionIdAttribute = AttributeValue.builder().b(SdkBytes.fromByteBuffer(revisionId)).build();
-		return revisionIdAttribute;
-	}
-	
-	public static AttributeValue toUpdatedAtId(String starts, Long updatedAt, Boolean from) {
-		var idBytes = ByteBuffer.wrap(starts.getBytes(StandardCharsets.UTF_8));
-		var date = ByteBuffer.allocate(Long.BYTES);	
-		date.putLong(updatedAt);
-		date.flip();
-		
-		var updatedAtId = ByteBuffer.allocate(Math.max(idBytes.capacity(), date.capacity()) + date.capacity()); 
-		
-		if (idBytes.capacity() < date.capacity()) {
-			for (int i = 0; i < date.capacity(); i++) {
-				if (i < idBytes.capacity()) {
-					updatedAtId.put(idBytes.get());
-					updatedAtId.put(date.get());
-				} else {
-					if (from) {
-						updatedAtId.put((byte) 0);
-					} else {
-						updatedAtId.put(UnsignedBytes.MAX_VALUE);
-					}
-					updatedAtId.put(date.get());
-				}
-			}
-		} else {
-			for (int i = 0; i < date.capacity(); i++) {
-				updatedAtId.put(idBytes.get());
-				updatedAtId.put(date.get());
-			}
-			for (int i = date.capacity(); i < idBytes.capacity(); i++) {
-				updatedAtId.put(idBytes.get());
-			}
-		}
-		
-		updatedAtId.flip();
-		var updatedAtIdAttribute = AttributeValue.builder().b(SdkBytes.fromByteBuffer(updatedAtId)).build();
-		return updatedAtIdAttribute;
-	}
 
     @Override
     public <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value) {
