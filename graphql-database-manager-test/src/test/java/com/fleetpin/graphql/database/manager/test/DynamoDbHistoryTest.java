@@ -25,7 +25,7 @@ import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 
 final class DynamoDbHistoryTest {
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testGetRevisionsById(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 		var table1 = new SimpleTable("revision1");
@@ -45,7 +45,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(2L, history.get(1).getRevision());
 	}
 
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testHistoryProcessor(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 		var table1 = new SimpleTable("revision1");
@@ -60,7 +60,7 @@ final class DynamoDbHistoryTest {
 
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testHistoryProcessor2(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 		var table1 = new SimpleTable("revision1");
@@ -76,7 +76,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(2, history.size());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testFromRevisionToRevisionQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 		var table1 = new SimpleTable("revision1");
@@ -111,7 +111,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(3L, history.get(1).getRevision());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testFromRevisionQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 		var table1 = new SimpleTable("revision1");
@@ -148,7 +148,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(5L, history.get(2).getRevision());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testLotsOfRevisions(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 
@@ -168,7 +168,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(2L, history.get(1).getRevision());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testFromUpdatedAtToUpdatedAtQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 		
 		var table1 = new SimpleTable("revision1");
@@ -211,7 +211,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(revision4Time, history.get(2).getUpdatedAt());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testFromUpdatedAtQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 		var table1 = new SimpleTable("revision1");
@@ -254,7 +254,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(revision4Time, history.get(1).getUpdatedAt());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testToUpdatedAtQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 
 		var table1 = new SimpleTable("revision1");
@@ -297,7 +297,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(revision2Time, history.get(1).getUpdatedAt());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testStartWithUpdatedAtToUpdatedAtQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 		
 		var table1 = new SimpleTable("revision1");
@@ -341,7 +341,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(revision4Time, history.get(2).getUpdatedAt());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testStartWithUpdatedAtQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 		
 		var table1 = new SimpleTable("revision1");
@@ -387,7 +387,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(5L, history.get(3).getRevision());
 	}
 	
-	@TestDatabase(withHistory=true)
+	@TestDatabase
 	void testStartWithToUpdatedAtQuery(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
 		
 		var table1 = new SimpleTable("revision1");

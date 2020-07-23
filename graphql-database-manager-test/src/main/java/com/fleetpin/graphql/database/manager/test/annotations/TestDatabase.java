@@ -27,5 +27,4 @@ import java.lang.annotation.Target;
 @ArgumentsSource(TestDatabaseProvider.class)
 public @interface TestDatabase {
     String organisationId() default "organisation";
-    boolean withHistory() default false;
 }
