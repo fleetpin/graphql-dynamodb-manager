@@ -61,8 +61,13 @@ public class HistoryProcessor {
 		        	
 		        	var items = new HashMap<String, List<WriteRequest>>();
 		        	var writeRequests = stream.map(item -> WriteRequest.builder().putRequest(builder -> builder.item(item)).build()).collect(Collectors.toList());
-		        	items.put(table+"_history", writeRequests);
-		        	client.batchWriteItem(builder -> builder.requestItems(items)).get();
+		        	if (writeRequests == null || writeRequests.isEmpty()) {
+		        	
+		        	} else {
+			        	items.put(table+"_history", writeRequests);
+			        	System.out.println(items);
+			        	client.batchWriteItem(builder -> builder.requestItems(items)).get();
+		        	}
 		        }				
 			}
 		} catch (Exception e) {

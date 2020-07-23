@@ -16,6 +16,7 @@ import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.QueryHistoryBuilder;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.History;
+import com.fleetpin.graphql.database.manager.annotations.TableName;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
@@ -433,6 +434,23 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(revision4Time, history.get(3).getUpdatedAt());
 	}
 	
+	@TestDatabase
+	void testNoHistoryTable(final Database db, final HistoryProcessor historyProcessor) throws InterruptedException, ExecutionException {
+
+		var table1 = new NoHistorySameNameTable("revision1");
+		table1.setId("testTable1");
+        db.put(table1).get();
+        table1 = new NoHistorySameNameTable("revision2");
+        table1.setId("testTable1");
+        table1.setRevision(1);
+        db.put(table1).get();
+        
+        historyProcessor.process();
+		var history = db.queryHistory(QueryHistoryBuilder.create(SameNameTable.class).id("testTable1").build()).get();
+		Assertions.assertEquals(0, history.size());
+
+	}
+	
 	@History
 	static class SimpleTable extends Table {
 		private String name;
@@ -453,7 +471,7 @@ final class DynamoDbHistoryTest {
 			return name;
 		}
 	}
-// need add test to test noHistory
+
 	@History
 	static class AnotherTable extends Table {
 		private String name;
@@ -470,5 +488,47 @@ final class DynamoDbHistoryTest {
 		}
 	}
 
+	@History
+	@TableName("SameName")
+	static class SameNameTable extends Table {
+		private String name;
+
+		public SameNameTable() {
+		}
+
+		public SameNameTable(String name) {
+			this.name = name;
+		}
+
+		public String getName() {
+			return name;
+		}
+		
+		@Override
+		public String toString() {
+			return name;
+		}
+	}
+	
+	@TableName("SameName")
+	static class NoHistorySameNameTable extends Table {
+		private String name;
+
+		public NoHistorySameNameTable() {
+		}
+
+		public NoHistorySameNameTable(String name) {
+			this.name = name;
+		}
+
+		public String getName() {
+			return name;
+		}
+		
+		@Override
+		public String toString() {
+			return name;
+		}
+	}
 
 }
