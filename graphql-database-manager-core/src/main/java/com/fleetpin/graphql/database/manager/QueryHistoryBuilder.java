@@ -3,6 +3,7 @@ package com.fleetpin.graphql.database.manager;
 import java.time.Instant;
 import java.util.function.Consumer;
 
+import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
 import com.google.common.base.Preconditions;
 
 public class QueryHistoryBuilder<V extends Table> {
@@ -55,6 +56,7 @@ public class QueryHistoryBuilder<V extends Table> {
     }
 
     public QueryHistory<V> build() {
+    	Preconditions.checkArgument(HistoryCoreUtil.hasHistory(type), "Can only do history when history annotation is present.");
     	Preconditions.checkArgument(!(id != null && startsWith != null), "ID and StartsWith cannot both be set.");
     	Preconditions.checkArgument(!(id == null && startsWith == null), "ID or StartsWith must be set.");
     	if (fromRevision != null || toRevision != null) {

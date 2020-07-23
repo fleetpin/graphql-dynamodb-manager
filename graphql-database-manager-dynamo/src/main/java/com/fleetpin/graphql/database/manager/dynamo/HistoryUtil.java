@@ -21,6 +21,10 @@ public class HistoryUtil {
 		return records.stream().map(record -> {
 			var newImage = record.dynamodb().newImage();
 			if (newImage != null) {
+				var hasHistory = newImage.get("history");
+				if (hasHistory == null || hasHistory.bool() != Boolean.TRUE ) {
+					return null;
+				}
 				var item = new HashMap<>(newImage);
 				var id = newImage.get("id").s().split(":",2);
 				var idRevision = toRevisionId(id[1], Long.parseLong(newImage.get("revision").n()));

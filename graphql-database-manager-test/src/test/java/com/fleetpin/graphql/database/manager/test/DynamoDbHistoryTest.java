@@ -15,6 +15,7 @@ package com.fleetpin.graphql.database.manager.test;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.QueryHistoryBuilder;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.annotations.History;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
@@ -432,6 +433,7 @@ final class DynamoDbHistoryTest {
 		Assertions.assertEquals(revision4Time, history.get(3).getUpdatedAt());
 	}
 	
+	@History
 	static class SimpleTable extends Table {
 		private String name;
 
@@ -451,7 +453,8 @@ final class DynamoDbHistoryTest {
 			return name;
 		}
 	}
-
+// need add test to test noHistory
+	@History
 	static class AnotherTable extends Table {
 		private String name;
 
@@ -466,5 +469,6 @@ final class DynamoDbHistoryTest {
 			return name;
 		}
 	}
+
 
 }

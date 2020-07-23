@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.fleetpin.graphql.database.manager.*;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
+import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
@@ -136,6 +137,9 @@ public class DynamoDb extends DatabaseDriver {
         var entries = TableUtil.toAttributes(mapper, entity);
         entries.remove("revision"); // needs to be at the top level as a limit on dynamo to be able to perform an atomic addition
         item.put("revision", AttributeValue.builder().n(Long.toString(revision + 1)).build()); 
+        if (HistoryCoreUtil.hasHistory(entity)) {
+        	item.put("history", AttributeValue.builder().bool(true).build());
+        }
         item.put("item", AttributeValue.builder().m(entries).build());
 
         Map<String, AttributeValue> links = new HashMap<>();
@@ -272,6 +276,9 @@ public class DynamoDb extends DatabaseDriver {
     
     @Override
     public <T extends Table> CompletableFuture<List<T>> queryHistory(DatabaseQueryHistoryKey<T> key) {
+    	if (this.historyTable == null) {
+    		throw new RuntimeException("Cannot query history table, because it's null.");
+    	}
     	var queryHistory = key.getQueryHistory();
         var organisationIdType  = AttributeValue.builder().s(key.getOrganisationId() + ":" + table(queryHistory.getType())).build();
        
