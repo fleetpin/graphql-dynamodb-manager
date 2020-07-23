@@ -18,13 +18,15 @@ public class HistoryUtil {
 
 	public static Stream<HashMap<String, AttributeValue>> toHistoryValue(List<Record> records) {
 		
-		return records.stream().map(record -> {
-			var newImage = record.dynamodb().newImage();
-			if (newImage != null) {
-				var hasHistory = newImage.get("history");
-				if (hasHistory == null || hasHistory.bool() != Boolean.TRUE ) {
-					return null;
-				}
+		return records.stream()
+				.map(record -> record.dynamodb().newImage())
+				.filter(Objects::nonNull)
+				.filter(newImage -> {
+					var hasHistory = newImage.get("history");
+					return (hasHistory != null && hasHistory.bool()== Boolean.TRUE );
+				})
+				.map(newImage -> {
+
 				var item = new HashMap<>(newImage);
 				var id = newImage.get("id").s().split(":",2);
 				var idRevision = toRevisionId(id[1], Long.parseLong(newImage.get("revision").n()));
@@ -44,10 +46,7 @@ public class HistoryUtil {
 
 				return item;
 
-			} else {
-				return null;
-			}
-		}).filter(Objects::nonNull);
+		});
 		
 	}
 
