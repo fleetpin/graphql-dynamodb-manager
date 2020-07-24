@@ -57,6 +57,7 @@ public final class DynamoDbManager extends DatabaseManager {
 		private List<String> tables;
 		private Supplier<String> idGenerator;
 		private DatabaseDriver database;
+		private String historyTable;
 		
 		
 		public DyanmoDbManagerBuilder dynamoDbAsyncClient(DynamoDbAsyncClient client) {
@@ -78,6 +79,11 @@ public final class DynamoDbManager extends DatabaseManager {
 		
 		public DyanmoDbManagerBuilder tables(String... tables) {
 			this.tables = Arrays.asList(tables);
+			return this;
+		}
+		
+		public DyanmoDbManagerBuilder historyTable(String historyTable) {
+			this.historyTable = historyTable;
 			return this;
 		}
 
@@ -110,7 +116,7 @@ public final class DynamoDbManager extends DatabaseManager {
 				idGenerator = () -> UUID.randomUUID().toString();
 			}
 
-			database = Objects.requireNonNullElse(database, new DynamoDb(mapper, tables, client, idGenerator));
+			database = Objects.requireNonNullElse(database, new DynamoDb(mapper, tables, historyTable, client, idGenerator));
 
 			return new DynamoDbManager(mapper, idGenerator, client, database);
 		}

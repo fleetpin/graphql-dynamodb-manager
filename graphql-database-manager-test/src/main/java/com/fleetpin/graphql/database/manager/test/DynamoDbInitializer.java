@@ -12,6 +12,12 @@
 
 package com.fleetpin.graphql.database.manager.test;
 
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreams;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClient;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClientBuilder;
 import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 import com.fleetpin.graphql.database.manager.Database;
@@ -21,6 +27,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
+import software.amazon.awssdk.services.dynamodb.streams.DynamoDbStreamsAsyncClient;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -45,7 +52,9 @@ final class DynamoDbInitializer {
                         .attributeName("id")
                         .keyType(KeyType.RANGE)
                         .build()
-                ).globalSecondaryIndexes(builder -> builder.indexName("secondaryGlobal").provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L)).projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(KeySchemaElement.builder()
+                )
+        		.streamSpecification(streamSpecification -> streamSpecification.streamEnabled(true).streamViewType(StreamViewType.NEW_IMAGE))
+        		.globalSecondaryIndexes(builder -> builder.indexName("secondaryGlobal").provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L)).projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(KeySchemaElement.builder()
                         .attributeName("secondaryGlobal")
                         .keyType(KeyType.HASH)
                         .build()))
@@ -63,8 +72,53 @@ final class DynamoDbInitializer {
                                 AttributeDefinition.builder().attributeName("secondaryGlobal").attributeType(ScalarAttributeType.S).build(),
                                 AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build()
                         ).provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
-        ).get();
+        ).get();        
     }
+    
+    static void createHistoryTable(final DynamoDbAsyncClient client, final String name) throws ExecutionException, InterruptedException {
+        if (client.listTables().get().tableNames().contains(name)) {
+            return;
+        }
+
+        client.createTable(t -> t.tableName(name).keySchema(
+        		KeySchemaElement.builder()
+        		.attributeName("organisationIdType")
+        		.keyType(KeyType.HASH)
+        		.build(),
+        		KeySchemaElement.builder()
+        		.attributeName("idRevision")
+        		.keyType(KeyType.RANGE)
+        		.build()
+        		)
+           		.localSecondaryIndexes(builder -> builder.indexName("startsWithUpdatedAt").projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(
+        				KeySchemaElement.builder()
+        				.attributeName("organisationIdType")
+        				.keyType(KeyType.HASH)
+        				.build(),		
+        				KeySchemaElement.builder()
+        				.attributeName("startsWithUpdatedAt")
+        				.keyType(KeyType.RANGE)
+        				.build()),
+        				builder -> builder.indexName("idDate").projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(
+        				KeySchemaElement.builder()
+        				.attributeName("organisationIdType")
+        				.keyType(KeyType.HASH)
+        				.build(),		
+        				KeySchemaElement.builder()
+        				.attributeName("idDate")
+        				.keyType(KeyType.RANGE)
+        				.build()))
+        		.attributeDefinitions(
+                                AttributeDefinition.builder().attributeName("organisationIdType").attributeType(ScalarAttributeType.S).build(),
+                                AttributeDefinition.builder().attributeName("idRevision").attributeType(ScalarAttributeType.B).build(),
+                                AttributeDefinition.builder().attributeName("idDate").attributeType(ScalarAttributeType.B).build(),
+                                AttributeDefinition.builder().attributeName("startsWithUpdatedAt").attributeType(ScalarAttributeType.B).build()
+                        ).provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
+        ).get();
+
+        
+    }
+    
 
     static DynamoDBProxyServer startDynamoServer(final String port) throws Exception {
         final String[] localArgs = {"-inMemory", "-port", port};
@@ -81,7 +135,15 @@ final class DynamoDbInitializer {
                 .endpointOverride(new URI("http://localhost:" + port))
                 .build();
     }
-
+    
+    static DynamoDbStreamsAsyncClient startDynamoStreamClient(final String port) throws URISyntaxException {
+        return DynamoDbStreamsAsyncClient.builder()
+                .region(Region.AWS_GLOBAL)
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("anything", "anything")))
+                .endpointOverride(new URI("http://localhost:" + port))
+                .build();
+    }
+    
     static String findFreePort() throws IOException {
         final var serverSocket = new ServerSocket(0);
         final var port = String.valueOf(serverSocket.getLocalPort());
@@ -101,10 +163,11 @@ final class DynamoDbInitializer {
         return database;
     }
 
-    static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final String[] tables) {
+    static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final String[] tables, String historyTable) {
         return DynamoDbManager.builder()
                 .tables(tables)
                 .dynamoDbAsyncClient(client)
+                .historyTable(historyTable)
                 .build();
     }
 
