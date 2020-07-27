@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
@@ -16,9 +15,9 @@ import software.amazon.awssdk.services.dynamodb.model.Record;
 
 public class HistoryUtil {
 
-	public static Stream<HashMap<String, AttributeValue>> toHistoryValue(List<Record> records) {
+	public static Stream<HashMap<String, AttributeValue>> toHistoryValue(Stream<Record> records) {
 		
-		return records.stream()
+		return records
 				.map(record -> record.dynamodb().newImage())
 				.filter(Objects::nonNull)
 				.filter(newImage -> {

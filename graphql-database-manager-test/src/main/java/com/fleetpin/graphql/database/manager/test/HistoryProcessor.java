@@ -1,33 +1,12 @@
 package com.fleetpin.graphql.database.manager.test;
 
-import static com.fleetpin.graphql.database.manager.test.DynamoDbInitializer.createHistoryTable;
-import static com.fleetpin.graphql.database.manager.test.DynamoDbInitializer.createTable;
-import static com.fleetpin.graphql.database.manager.test.DynamoDbInitializer.getDatabaseManager;
-
 import java.lang.reflect.Parameter;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
-import com.amazonaws.services.dynamodbv2.model.DescribeStreamRequest;
-import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
-import com.fleetpin.graphql.database.manager.Table;
-import com.fleetpin.graphql.database.manager.dynamo.DynamoDb;
-import com.fleetpin.graphql.database.manager.dynamo.HistoryUtil;
+import com.fleetpin.graphql.database.dynamo.history.lambda.HistoryLambda;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 
-import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
-import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
-import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.ShardIteratorType;
-import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 import software.amazon.awssdk.services.dynamodb.streams.DynamoDbStreamsAsyncClient;
 
 public class HistoryProcessor {
@@ -44,6 +23,29 @@ public class HistoryProcessor {
         this.streamClient = streamClient;
 	}
 	
+	static class Processor extends HistoryLambda {
+		private final DynamoDbAsyncClient client;
+		private final String tableName;
+		
+		
+		public Processor(DynamoDbAsyncClient client, String tableName) {
+			this.client = client;
+			this.tableName = tableName;
+		}
+
+		@Override
+		public DynamoDbAsyncClient getClient() {
+			return client;
+		}
+		
+		@Override
+		public String getTableName() {
+			return tableName;
+		}
+		
+		
+	}
+	
 	public void process() {
 		try {
 			for (final String table : tables) {
@@ -57,15 +59,8 @@ public class HistoryProcessor {
 		        for (final var shard : shards) {
 		        	var shardIterator = streamClient.getShardIterator(builder -> builder.shardIteratorType(ShardIteratorType.TRIM_HORIZON).streamArn(streamArn).shardId(shard.shardId())).get().shardIterator();
 		        	var response = streamClient.getRecords(builder -> builder.shardIterator(shardIterator)).get();
-		        	var stream = HistoryUtil.toHistoryValue(response.records());
-		        	
-		        	var items = new HashMap<String, List<WriteRequest>>();
-		        	var writeRequests = stream.map(item -> WriteRequest.builder().putRequest(builder -> builder.item(item)).build()).collect(Collectors.toList());
-		        	if (writeRequests != null && !writeRequests.isEmpty()) {
-			        	items.put(table+"_history", writeRequests);
-			        	System.out.println(items);
-			        	client.batchWriteItem(builder -> builder.requestItems(items)).get();
-		        	}
+		        	var processor = new Processor(client, table+"_history");
+		        	processor.process(response.records().stream());
 		        }				
 			}
 		} catch (Exception e) {
