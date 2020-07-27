@@ -16,13 +16,10 @@ import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
-import org.w3c.dom.Attr;
-import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -102,6 +99,14 @@ final class DynamoDbQueryBuilderTest {
 	static String getId(int i) {
 		return String.format("%04d", i);
 	}
+	
+	private void swallow(CompletableFuture<?> f) {
+		try {
+			f.get();
+		} catch (InterruptedException | ExecutionException e) {
+			throw new RuntimeException();
+		}
+	}
 
 	// This test tests querying against large pieces of data which force Dynamoclient to return multiple pages.
 	@TestDatabase
@@ -118,7 +123,7 @@ final class DynamoDbQueryBuilderTest {
 				.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
 				.collect(Collectors.toList());
 
-		l.forEach(db::put);
+		l.stream().map(db::put).forEach(this::swallow);
 
 		var result = db.query(BigData.class, builder -> builder.after(getId(456)).limit(100)).get();
 
@@ -141,7 +146,7 @@ final class DynamoDbQueryBuilderTest {
 				.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
 				.collect(Collectors.toList());
 
-		l.forEach(db::put);
+		l.stream().map(db::put).forEach(this::swallow);
 		db.putGlobal(new BigData(getId(999), "big global", createMatrix(100)));
 
 		var result = db.query(BigData.class, builder -> builder.after(getId(200)).limit(100)).get();
