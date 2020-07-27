@@ -13,7 +13,6 @@
         <module>graphql-database-manager-test</module>
         <!-- <module>graphql-database-manager-memory</module> -->
         <module>graphql-database-manager-dynamo</module>
-        <module>graphql-database-manager-dynamo</module>
         <module>graphql-database-dynmodb-history-lambda</module>
     </modules>
 
