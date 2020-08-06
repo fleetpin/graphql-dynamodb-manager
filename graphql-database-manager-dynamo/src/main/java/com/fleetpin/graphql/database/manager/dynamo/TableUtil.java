@@ -186,7 +186,7 @@ public class TableUtil {
 		}
 		if(value.n() != null) {
 			double v = Double.parseDouble(value.n());
-			if(Math.floor(v) == v) {
+			if(Math.floor(v) == v && value.n().indexOf('.') == -1) {
 				return LongNode.valueOf(Long.parseLong(value.n()));
 			}
 			return DoubleNode.valueOf(v);
