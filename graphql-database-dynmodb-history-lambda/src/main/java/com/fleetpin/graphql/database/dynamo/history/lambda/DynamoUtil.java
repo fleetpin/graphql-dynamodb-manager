@@ -28,6 +28,9 @@ public class DynamoUtil {
 	}
 
 	public static Identity toV2(com.amazonaws.services.dynamodbv2.model.Identity userIdentity) {
+		if(userIdentity == null) {
+			return null;
+		}
 		var builder = Identity.builder();
 		builder.principalId(userIdentity.getPrincipalId());
 		builder.type(userIdentity.getType());
