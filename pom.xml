@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.fleetpin</groupId>
     <artifactId>graphql-database-manager</artifactId>
-    <version>0.2.14-SNAPSHOT</version>
+    <version>0.2.17-SNAPSHOT</version>
     <name>GraphQL Builder</name>
     <description>library to make working with dynamodb and graphql easy</description>
     <url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
@@ -13,6 +13,7 @@
         <module>graphql-database-manager-test</module>
         <!-- <module>graphql-database-manager-memory</module> -->
         <module>graphql-database-manager-dynamo</module>
+        <module>graphql-database-dynmodb-history-lambda</module>
     </modules>
 
     <scm>

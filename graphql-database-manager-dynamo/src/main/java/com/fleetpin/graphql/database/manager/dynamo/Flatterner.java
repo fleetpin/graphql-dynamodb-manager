@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -51,8 +52,8 @@ public final class Flatterner {
 		}
 	}
 
-	public DynamoItem get(String id) {
-		return lookup.get(id);
+	public DynamoItem get(Class<? extends Table> type, String id) {
+		return lookup.get(TableCoreUtil.table(type) + ":" + id);
 	}
 
 

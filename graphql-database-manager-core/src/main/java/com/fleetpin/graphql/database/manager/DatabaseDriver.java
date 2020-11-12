@@ -32,6 +32,8 @@ public abstract class DatabaseDriver {
     public abstract <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items);
 
     public abstract <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key);
+    
+    public abstract <T extends Table> CompletableFuture<List<T>> queryHistory(DatabaseQueryHistoryKey<T> key);
 
     public abstract <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value);
 
