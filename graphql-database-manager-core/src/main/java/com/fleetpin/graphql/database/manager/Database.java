@@ -14,6 +14,7 @@ package com.fleetpin.graphql.database.manager;
 
 import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
 import com.fleetpin.graphql.database.manager.access.ModificationPermission;
+import com.fleetpin.graphql.database.manager.util.BackupDynamoItem;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import org.dataloader.DataLoader;
 import org.dataloader.DataLoaderOptions;
@@ -91,6 +92,14 @@ public class Database {
 			}
 			return items.get(0);
 		});
+	}
+
+	public CompletableFuture<List<BackupDynamoItem>> makeBackup(String organisationId) {
+		return driver.makeBackup(organisationId);
+	}
+
+	public CompletableFuture<List<BackupDynamoItem>> restoreBackup(List<BackupDynamoItem> entities) {
+		return driver.restoreBackup(entities);
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String id) {

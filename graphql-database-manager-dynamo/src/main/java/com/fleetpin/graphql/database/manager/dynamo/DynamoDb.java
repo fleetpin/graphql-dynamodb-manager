@@ -15,19 +15,16 @@ package com.fleetpin.graphql.database.manager.dynamo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.util.BackupDynamoItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
-import com.google.common.primitives.UnsignedBytes;
-
-import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -36,7 +33,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
-import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 
 public class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
@@ -227,7 +223,7 @@ public class DynamoDb extends DatabaseDriver {
         return client.batchGetItem(builder -> builder.requestItems(items)).thenApply(response -> {
             var responseItems = response.responses();
 
-            var flattener = new Flatterner(false);
+            var flattener = new Flattener(false);
             entityTables.forEach(table -> {
                 flattener.add(table, responseItems.get(table));
             });
@@ -267,7 +263,7 @@ public class DynamoDb extends DatabaseDriver {
         var future = CompletableFutureUtil.sequence(futures);
 
         return future.thenApply(results -> {
-            var flattener = new Flatterner(false);
+            var flattener = new Flattener(false);
 
             results.forEach(list -> flattener.addItems(list));
             return flattener.results(mapper, key.getQuery().getType(), Optional.ofNullable(key.getQuery().getLimit()));
@@ -417,7 +413,7 @@ public class DynamoDb extends DatabaseDriver {
             });
         }
         return future.thenApply(results -> {
-            var flattener = new Flatterner(true);
+            var flattener = new Flattener(true);
             results.forEach(list -> flattener.addItems(list));
             return flattener.results(mapper, type);
         });
@@ -508,6 +504,73 @@ public class DynamoDb extends DatabaseDriver {
         return s.getFuture();
     }
     
+    @Override
+    public CompletableFuture<List<BackupDynamoItem>> restoreBackup(List<BackupDynamoItem> entities) {
+
+        List<CompletableFuture<BackupDynamoItem>> completableFutures = new ArrayList<>();
+
+        for (BackupDynamoItem entity: entities) {
+
+            completableFutures.add(client.putItem(request -> request.tableName(entityTable).item(TableUtil.toAttributes(mapper, entity.getItem())).applyMutation(mutator -> {
+
+                })).exceptionally(failure -> {
+                    if (failure.getCause() instanceof ConditionalCheckFailedException) {
+                        throw new RevisionMismatchException(failure.getCause());
+                    }
+                    Throwables.throwIfUnchecked(failure);
+                    throw new RuntimeException(failure);
+                }).thenApply(response -> {
+                    return entity;
+                })
+            );
+        }
+        CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[0]))
+            .exceptionally(ex -> null)
+            .join();
+
+        Map<Boolean, List<CompletableFuture<BackupDynamoItem>>> collect = completableFutures.stream()
+            .collect(Collectors.partitioningBy(CompletableFuture::isCompletedExceptionally));
+        return CompletableFutureUtil.sequence(collect.get(true));
+
+    }
+
+    @Override
+    public CompletableFuture<List<BackupDynamoItem>> makeBackup(String organisationId) {
+
+        CompletableFuture<List<List<BackupDynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+        AttributeValue orgId = AttributeValue.builder().s(organisationId).build();
+        for (var table : entityTables) {
+            future = future.thenCombine(makeBackup(table, orgId), (a, b) -> {
+                a.add(b);
+                return a;
+            });
+        }
+        return future.thenApply(results -> {
+           return results.stream().flatMap(List::stream).collect(Collectors.toList());    });
+    }
+
+
+    private CompletableFuture<List<BackupDynamoItem>> makeBackup(String table, AttributeValue organisationId) {
+        Map<String, AttributeValue> keyConditions = new HashMap<>();
+        keyConditions.put(":organisationId", organisationId);
+        var toReturn = new ArrayList<BackupDynamoItem>();
+        return client.queryPaginator(r -> r.tableName(table)
+            .consistentRead(true)
+            .keyConditionExpression("organisationId = :organisationId")
+            .expressionAttributeValues(keyConditions)
+        ).subscribe(response -> {
+           response.items().forEach(
+                item -> {
+                    toReturn.add(new BackupDynamoItem(table, item));
+                });
+
+        }).thenApply(__ -> {
+            return toReturn;
+        });
+    }
+
+
+
     private CompletableFuture<?> removeLinks(AttributeValue organisationIdAttribute, String fromTable, Set<String> fromIds, String targetTable, String targetId) {
 
         var targetIdAttribute = AttributeValue.builder().ss(targetId).build();

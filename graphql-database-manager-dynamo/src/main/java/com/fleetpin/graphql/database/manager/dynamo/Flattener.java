@@ -21,12 +21,12 @@ import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-public final class Flatterner {
+public final class Flattener {
 
 	private final Map<String, DynamoItem> lookup;
 	private final boolean includeOrganisationId;
 	
-	Flatterner(boolean includeOrganisationId) {
+	Flattener(boolean includeOrganisationId) {
 		lookup = new HashMap<>();
 		this.includeOrganisationId = includeOrganisationId;
 	}

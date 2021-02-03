@@ -12,6 +12,8 @@
 
 package com.fleetpin.graphql.database.manager.test;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
@@ -20,13 +22,19 @@ import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
+import com.fleetpin.graphql.database.manager.util.BackupDynamoItem;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 final class DynamoDbIndexesTest {
+
+
 
 	@TestDatabase
 	void testGlobal(final Database db) throws InterruptedException, ExecutionException {
@@ -178,6 +186,121 @@ final class DynamoDbIndexesTest {
 		Assertions.assertNull(nonExistent);
 	}
 
+
+	@TestDatabase
+	void testMakeBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
+
+		final var db0 = dynamoDbManager.getDatabase("organisation-0");
+		final var db1 = dynamoDbManager.getDatabase("organisation-1");
+		db0.start(new CompletableFuture<>());
+		db1.start(new CompletableFuture<>());
+
+		final var putAvocado = db0.put(new SimpleTable("avocado", "fruit")).get();
+		final var putBanana = db0.put(new SimpleTable("banana", "fruit")).get();
+		final var putBeer = db0.put(new Drink("Beer", true)).get();
+		final var putTomato = db1.put(new SimpleTable("tomato", "fruit")).get();
+
+
+		final var orgQuery1 = db0.makeBackup("organisation-0").get();
+		Assertions.assertNotNull(putAvocado);
+		Assertions.assertNotNull(putBanana);
+		Assertions.assertTrue(orgQuery1.size() == 3);
+		List<String> names = List.of(putBeer.getName(), putBanana.getName(), putAvocado.getName());
+
+		checkResponseNameField(orgQuery1, 0, names);
+		checkResponseNameField(orgQuery1, 1, names);
+		checkResponseNameField(orgQuery1, 2, names);
+
+		final var orgQuery2 = db1.makeBackup("organisation-1").get();
+		Assertions.assertNotNull(putTomato);
+		checkResponseNameField(orgQuery2, 0, List.of(putTomato.getName()));
+
+	}
+
+
+	@TestDatabase
+	void testRestoreBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
+		final String DRINK_ID = "1234";
+		final String SIMPLE_ID = "6789";
+
+		final var db0 = dynamoDbManager.getDatabase("organisation-0");
+		db0.start(new CompletableFuture<>());
+
+		Map<String, AttributeValue> drinkAttributes = new HashMap<>();
+		drinkAttributes.put("organisationId", AttributeValue.builder().s("organisation-0").build());
+		drinkAttributes.put("id", AttributeValue.builder().s("drinks:" + DRINK_ID).build());
+		Map<String, AttributeValue> items = new HashMap<>();
+		items.put("revision", AttributeValue.builder().s("1").build());
+		items.put("name", AttributeValue.builder().s("Beer").build());
+		items.put("alcoholic", AttributeValue.builder().bool(true).build());
+		items.put("id", AttributeValue.builder().s("drinks:" + DRINK_ID).build());
+		drinkAttributes.put("item", AttributeValue.builder().m(items).build());
+
+
+		Map<String, AttributeValue> simpleTableAttributes = new HashMap<>();
+		simpleTableAttributes.put("organisationId", AttributeValue.builder().s("organisation-0").build());
+		simpleTableAttributes.put("id", AttributeValue.builder().s("simpletables:" + SIMPLE_ID).build());
+		items.clear();
+		items.put("revision", AttributeValue.builder().s("1").build());
+		items.put("name", AttributeValue.builder().s("avocado").build());
+		items.put("globalLookup", AttributeValue.builder().s("fruit").build());
+		items.put("id", AttributeValue.builder().s("simpletables:" + SIMPLE_ID).build());
+		simpleTableAttributes.put("item", AttributeValue.builder().m(items).build());
+		Map<String, AttributeValue> links = new HashMap<>();
+		links.put("workflows", AttributeValue.builder().ss("workflowId123").build());
+		simpleTableAttributes.put("links", AttributeValue.builder().m(links).build());
+
+		BackupDynamoItem drinkItem = new BackupDynamoItem("table", drinkAttributes);
+		BackupDynamoItem simpleTableItem = new BackupDynamoItem("table", simpleTableAttributes);
+
+		final var failedInserts = db0.restoreBackup(List.of(simpleTableItem, drinkItem)).get();
+
+		Assertions.assertEquals(0, failedInserts.size());
+
+		final var drinkExists = db0.get(Drink.class, DRINK_ID).get();
+		Assertions.assertNotNull(drinkExists);
+
+		Assertions.assertEquals("Beer", drinkExists.getName());
+		Assertions.assertEquals(true, drinkExists.getAlcoholic());
+
+		final var simpleTableExists = db0.get(SimpleTable.class, SIMPLE_ID).get();
+		Assertions.assertNotNull(simpleTableExists);
+
+		Assertions.assertEquals("avocado", simpleTableExists.getName());
+		Assertions.assertEquals("fruit", simpleTableExists.getGlobalLookup());
+
+	}
+
+
+	private void checkResponseNameField(List<BackupDynamoItem> queryResult, Integer rank, List<String> names) {
+		var jsonMap = queryResult.get(rank).getItem();
+		ObjectMapper om = new ObjectMapper();
+		var itemMap = om.convertValue(jsonMap, new TypeReference<Map<String, Object>>(){});
+		Assertions.assertTrue(names.contains( ((HashMap<String, Object>) itemMap.get("item")).get("name")));
+	}
+
+	public static class Drink extends Table {
+		private String name;
+		private Boolean alcoholic;
+
+
+		public Drink(){}
+
+		public Drink(String name, Boolean alcoholic) {
+			this.name = name;
+			this.alcoholic = alcoholic;
+		}
+
+		public String getName() {
+			return name;
+		}
+
+		public Boolean getAlcoholic() {
+			return alcoholic;
+		}
+
+	}
+
 	public static class SimpleTable extends Table {
 		private String name;
 		private String globalLookup;
@@ -190,6 +313,7 @@ final class DynamoDbIndexesTest {
 			this.globalLookup = globalLookup;
 		}
 
+
 		@SecondaryIndex
 		public String getName() {
 			return name;
@@ -199,5 +323,6 @@ final class DynamoDbIndexesTest {
 		public String getGlobalLookup() {
 			return globalLookup;
 		}
+
 	}
 }

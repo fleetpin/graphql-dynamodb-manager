@@ -12,6 +12,8 @@
 
 package com.fleetpin.graphql.database.manager;
 
+import com.fleetpin.graphql.database.manager.util.BackupDynamoItem;
+
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -32,7 +34,11 @@ public abstract class DatabaseDriver {
     public abstract <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items);
 
     public abstract <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key);
-    
+
+    public abstract CompletableFuture<List<BackupDynamoItem>> restoreBackup(List<BackupDynamoItem> entities);
+
+    public abstract CompletableFuture<List<BackupDynamoItem>> makeBackup(String organisationId);
+
     public abstract <T extends Table> CompletableFuture<List<T>> queryHistory(DatabaseQueryHistoryKey<T> key);
 
     public abstract <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value);

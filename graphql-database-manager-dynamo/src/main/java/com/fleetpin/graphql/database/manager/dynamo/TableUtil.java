@@ -27,27 +27,18 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.BinaryNode;
-import com.fasterxml.jackson.databind.node.BooleanNode;
-import com.fasterxml.jackson.databind.node.DoubleNode;
-import com.fasterxml.jackson.databind.node.LongNode;
-import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
+import com.fleetpin.graphql.database.manager.util.BaseTableUtil;
 import software.amazon.awssdk.core.SdkBytes;
-import software.amazon.awssdk.core.util.DefaultSdkAutoConstructList;
-import software.amazon.awssdk.core.util.DefaultSdkAutoConstructMap;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-public class TableUtil {
+public class TableUtil extends BaseTableUtil {
 
 	static String getSecondaryGlobal(Table entity) {
 		for(var method: entity.getClass().getMethods()) {
@@ -90,13 +81,37 @@ public class TableUtil {
 		Iterator<Entry<String, JsonNode>> fields = tree.fields();
 		fields.forEachRemaining(entry -> {
 			Entry<String, JsonNode> field = entry;
-			AttributeValue attribute = toAttribute(field.getValue());
+			AttributeValue attribute;
+			if(field.getKey().equals("links")){
+				attribute = toSpecialAttribute(field.getValue());
+			}else {
+				attribute = toAttribute(field.getValue());
+			}
 			if(attribute != null) {
 				entries.put(field.getKey(), attribute);
 			}
 		});
 		return entries;
 		
+	}
+
+	private static AttributeValue toSpecialAttribute(JsonNode value) {
+
+		ObjectNode tree = (ObjectNode) value;
+		Map<String, AttributeValue> entries = new HashMap<>();
+		Iterator<Entry<String, JsonNode>> fields = tree.fields();
+		fields.forEachRemaining(entry -> {
+			//As links, assuming structure a bit here
+			Entry<String, JsonNode> field = entry;
+			entries.put(field.getKey(), createSS(field.getValue()));
+		});
+		return AttributeValue.builder().m(entries).build();
+	}
+
+	private static AttributeValue createSS(JsonNode value) {
+
+		List<String> array = stream(value).map(x -> x.asText()).collect(Collectors.toList());
+		return AttributeValue.builder().ss(array).build();
 	}
 
 
@@ -151,93 +166,7 @@ public class TableUtil {
 		return StreamSupport.stream(Spliterators.spliteratorUnknownSize(array.iterator(), 0), false);
 	}
 
-	static <T> T convertTo(ObjectMapper mapper, AttributeValue attributeValue, Class<T> type) {
-		if(attributeValue == null) {
-			return null;
-		}
-		try {
-			return mapper.treeToValue(toJson(mapper, attributeValue), type);
-		} catch (JsonProcessingException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
 
-	static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
-		try {
-			ObjectNode objNode = mapper.createObjectNode();
-			item.forEach((key, v) -> {
-				objNode.set(key, toJson(mapper, v));
-			});
-			return mapper.treeToValue(objNode, type);
-		} catch (JsonProcessingException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
-
-	private static JsonNode toJson(ObjectMapper mapper, AttributeValue value) {
-		if(value.bool() != null) {
-			return BooleanNode.valueOf(value.bool());
-		}
-		if(value.nul() != null && value.nul()) {
-			return NullNode.instance;
-		}
-		if(value.b() != null) {
-			return BinaryNode.valueOf(value.b().asByteArray());
-		}
-		if(value.n() != null) {
-			double v = Double.parseDouble(value.n());
-			if(Math.floor(v) == v && value.n().indexOf('.') == -1 && Long.MAX_VALUE < v && Long.MIN_VALUE > v) {
-				return LongNode.valueOf(Long.parseLong(value.n()));
-			}
-			return DoubleNode.valueOf(v);
-		}
-		if(value.s() != null) {
-			return TextNode.valueOf(value.s());
-		}
-
-		Object defArray =  DefaultSdkAutoConstructList.getInstance();
-		Object defMap =  DefaultSdkAutoConstructMap.getInstance();
-		if(value.bs() != defArray) {
-			ArrayNode arrayNode = mapper.createArrayNode();
-			for(SdkBytes b: value.bs()) {
-				arrayNode.add(BinaryNode.valueOf(b.asByteArray()));
-			}
-			return arrayNode;
-		}
-		if(value.l() != defArray) {
-			ArrayNode arrayNode = mapper.createArrayNode();
-			for(AttributeValue l: value.l()) {
-				arrayNode.add(toJson(mapper, l));	 
-			}
-			return arrayNode;
-		}
-
-		if(value.ns() != defArray) {
-			ArrayNode arrayNode = mapper.createArrayNode();
-			for(String s: value.ns()) {
-				arrayNode.add(TextNode.valueOf(s));
-			}
-			return arrayNode;
-		}
-		if(value.ss() != defArray) {
-			ArrayNode arrayNode = mapper.createArrayNode();
-			for(String s: value.ss()) {
-				arrayNode.add(TextNode.valueOf(s));
-			}
-			return arrayNode;
-		}
-		if(value.m() != defMap) {
-			ObjectNode objNode = mapper.createObjectNode();
-			if(value.m().isEmpty()) {
-				return NullNode.instance;
-			}
-			value.m().forEach((key, v) -> {
-				objNode.set(key, toJson(mapper, v));
-			});
-			return objNode;
-		}
-		throw new RuntimeException("Unsupported type " + value);
-	}
 
 	static <T> CompletableFuture<List<T>> all(List<CompletableFuture<T>> collect) {
 		return CompletableFuture.allOf(collect.toArray(CompletableFuture[]::new))
