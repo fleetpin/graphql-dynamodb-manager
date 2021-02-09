@@ -512,10 +512,11 @@ public class DynamoDb extends DatabaseDriver {
 
 		List<CompletableFuture<BatchWriteItemResponse>> completableFutures = new ArrayList<>();
 		List<BackupItem> batch = new ArrayList<>();
-
+		int batchCount = 0;
 		for (BackupItem entity : entities) {
 			batch.add(entity);
-			if (batch.size() == DYNAMO_BATCH_SIZE || batch.size() == entities.size()) {
+			batchCount++;
+			if (batch.size() == DYNAMO_BATCH_SIZE || batchCount == entities.size()) {
 				List<WriteRequest> requests = new ArrayList<>();
 
 				batch.forEach(item ->
