@@ -189,7 +189,7 @@ final class DynamoDbIndexesTest {
 
 
 	@TestDatabase
-	void testMakeBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
+	void testTakeBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
 
 		final var db0 = dynamoDbManager.getDatabase("organisation-0");
 		final var db1 = dynamoDbManager.getDatabase("organisation-1");
