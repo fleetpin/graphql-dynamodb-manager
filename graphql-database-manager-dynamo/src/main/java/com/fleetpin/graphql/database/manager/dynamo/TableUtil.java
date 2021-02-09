@@ -93,8 +93,7 @@ public class TableUtil {
 		Iterator<Entry<String, JsonNode>> fields = tree.fields();
 		fields.forEachRemaining(entry -> {
 			Entry<String, JsonNode> field = entry;
-			AttributeValue attribute;
-			attribute = toAttribute(field.getValue());
+			AttributeValue attribute = toAttribute(field.getValue());
 			if (attribute != null) {
 				entries.put(field.getKey(), attribute);
 			}
@@ -113,7 +112,7 @@ public class TableUtil {
 			entityItem.remove("links");
 			Map<String, AttributeValue> linkMap = new HashMap<>();
 			entity.getLinks().asMap().forEach((key, value) -> {
-				linkMap.put(key, createSS(value));
+				linkMap.put(key, AttributeValue.builder().ss(value).build());
 			});
 			entries.put("links", AttributeValue.builder().m(linkMap).build());
 		}
@@ -130,29 +129,7 @@ public class TableUtil {
 			}
 		});
 
-
 		return entries;
-
-	}
-
-
-//	private static AttributeValue toSpecialAttribute(JsonNode value) {
-//
-//		ObjectNode tree = (ObjectNode) value;
-//		Map<String, AttributeValue> entries = new HashMap<>();
-//		Iterator<Entry<String, JsonNode>> fields = tree.fields();
-//		fields.forEachRemaining(entry -> {
-//			//As links, assuming structure a bit here
-//			Entry<String, JsonNode> field = entry;
-//			entries.put(field.getKey(), createSS(field.getValue()));
-//		});
-//		return AttributeValue.builder().m(entries).build();
-//	}
-
-	private static AttributeValue createSS(Collection<String> value) {
-
-		List<String> array = value.stream().collect(Collectors.toList());
-		return AttributeValue.builder().ss(array).build();
 	}
 
 
