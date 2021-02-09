@@ -105,8 +105,20 @@ public class TableUtil {
 
 	static Map<String, AttributeValue> toAttributes(ObjectMapper mapper, BackupItem entity) {
 		Map<String, AttributeValue> entries = new HashMap<>();
-		ObjectNode tree = mapper.valueToTree(entity.getItem());
+		//Handle links specially, so remove here
+		var entityItem = entity.getItem();
+		HashMultimap<String, String> links = entity.getLinks();
 
+		if (links != null) {
+			entityItem.remove("links");
+			Map<String, AttributeValue> linkMap = new HashMap<>();
+			entity.getLinks().asMap().forEach((key, value) -> {
+				linkMap.put(key, createSS(value));
+			});
+			entries.put("links", AttributeValue.builder().m(linkMap).build());
+		}
+
+		ObjectNode tree = mapper.valueToTree(entityItem);
 
 		Iterator<Entry<String, JsonNode>> fields = tree.fields();
 		fields.forEachRemaining(entry -> {
@@ -118,12 +130,6 @@ public class TableUtil {
 			}
 		});
 
-		Map<String, AttributeValue> links = new HashMap<>();
-		entity.getLinks().asMap().forEach((key, value) -> {
-			links.put(key, createSS(value));
-		});
-
-		entries.put("links", AttributeValue.builder().m(links).build());
 
 		return entries;
 

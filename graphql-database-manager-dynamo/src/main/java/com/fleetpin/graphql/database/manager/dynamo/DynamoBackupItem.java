@@ -43,8 +43,6 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 
 		this.table = table;
 		this.item = (Map<String, JsonNode>) TableUtil.convertTo(om, item, Map.class);
-		//Keep as separate object
-		this.item.remove("links");
 
 
 		this.links = HashMultimap.create();
