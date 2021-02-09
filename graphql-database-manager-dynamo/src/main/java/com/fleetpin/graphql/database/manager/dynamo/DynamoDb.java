@@ -510,6 +510,7 @@ public class DynamoDb extends DatabaseDriver {
 	@Override
 	public CompletableFuture<Void> restoreBackup(List<BackupItem> entities) {
 
+		List<CompletableFuture<BatchWriteItemResponse>> completableFutures = new ArrayList<>();
 		List<BackupItem> batch = new ArrayList<>();
 
 		for (BackupItem entity : entities) {
@@ -523,11 +524,11 @@ public class DynamoDb extends DatabaseDriver {
 										builder.item(TableUtil.toAttributes(mapper, item)).build()
 								).build()));
 
-				client.batchWriteItem(BatchWriteItemRequest
-						.builder()
-						.requestItems(Map.of(entityTable, requests))
-						.build()
-				).thenApply(
+				completableFutures.add(client.batchWriteItem(BatchWriteItemRequest
+								.builder()
+								.requestItems(Map.of(entityTable, requests))
+								.build()
+						).thenApply(
 						items -> {
 							do {
 								client.batchWriteItem(BatchWriteItemRequest
@@ -535,20 +536,21 @@ public class DynamoDb extends DatabaseDriver {
 										.requestItems(items.unprocessedItems())
 										.build());
 							} while (items.unprocessedItems().size() > 0);
-							return true;
+							return items;
 						}
-				).exceptionally(failure -> {
-					if (failure.getCause() instanceof ConditionalCheckFailedException) {
-						throw new RevisionMismatchException(failure.getCause());
-					}
-					Throwables.throwIfUnchecked(failure);
-					throw new RuntimeException(failure);
-				});
+						).exceptionally(failure -> {
+							if (failure.getCause() instanceof ConditionalCheckFailedException) {
+								throw new RevisionMismatchException(failure.getCause());
+							}
+							Throwables.throwIfUnchecked(failure);
+							throw new RuntimeException(failure);
+						})
+				);
 				batch.clear();
 			}
 		}
 
-		return CompletableFuture.completedFuture(null);
+		return CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[completableFutures.size()]));
 	}
 
 	@Override
@@ -557,18 +559,19 @@ public class DynamoDb extends DatabaseDriver {
 		CompletableFuture<List<List<BackupItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
 		AttributeValue orgId = AttributeValue.builder().s(organisationId).build();
 		for (var table : entityTables) {
-			future = future.thenCombine(makeBackup(table, orgId), (a, b) -> {
+			future = future.thenCombine(takeBackup(table, orgId), (a, b) -> {
 				a.add(b);
 				return a;
 			});
 		}
+
 		return future.thenApply(results -> {
 			return results.stream().flatMap(List::stream).collect(Collectors.toList());
 		});
 	}
 
 
-	private CompletableFuture<List<BackupItem>> makeBackup(String table, AttributeValue organisationId) {
+	private CompletableFuture<List<BackupItem>> takeBackup(String table, AttributeValue organisationId) {
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
 		keyConditions.put(":organisationId", organisationId);
 		var toReturn = new ArrayList<BackupItem>();
