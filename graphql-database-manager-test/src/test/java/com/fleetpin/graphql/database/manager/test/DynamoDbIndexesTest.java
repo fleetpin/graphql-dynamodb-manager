@@ -18,11 +18,12 @@ import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
+import com.fleetpin.graphql.database.manager.dynamo.DynamoBackupItem;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
-import com.fleetpin.graphql.database.manager.util.BackupDynamoItem;
+import com.fleetpin.graphql.database.manager.util.BackupItem;
 import org.junit.jupiter.api.Assertions;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -201,7 +202,7 @@ final class DynamoDbIndexesTest {
 		final var putTomato = db1.put(new SimpleTable("tomato", "fruit")).get();
 
 
-		final var orgQuery1 = db0.makeBackup("organisation-0").get();
+		final var orgQuery1 = db0.takeBackup("organisation-0").get();
 		Assertions.assertNotNull(putAvocado);
 		Assertions.assertNotNull(putBanana);
 		Assertions.assertTrue(orgQuery1.size() == 3);
@@ -211,7 +212,7 @@ final class DynamoDbIndexesTest {
 		checkResponseNameField(orgQuery1, 1, names);
 		checkResponseNameField(orgQuery1, 2, names);
 
-		final var orgQuery2 = db1.makeBackup("organisation-1").get();
+		final var orgQuery2 = db1.takeBackup("organisation-1").get();
 		Assertions.assertNotNull(putTomato);
 		checkResponseNameField(orgQuery2, 0, List.of(putTomato.getName()));
 
@@ -250,12 +251,10 @@ final class DynamoDbIndexesTest {
 		links.put("workflows", AttributeValue.builder().ss("workflowId123").build());
 		simpleTableAttributes.put("links", AttributeValue.builder().m(links).build());
 
-		BackupDynamoItem drinkItem = new BackupDynamoItem("table", drinkAttributes);
-		BackupDynamoItem simpleTableItem = new BackupDynamoItem("table", simpleTableAttributes);
+		BackupItem drinkItem = new DynamoBackupItem("table", drinkAttributes);
+		BackupItem simpleTableItem = new DynamoBackupItem("table", simpleTableAttributes);
 
-		final var failedInserts = db0.restoreBackup(List.of(simpleTableItem, drinkItem)).get();
-
-		Assertions.assertEquals(0, failedInserts.size());
+		db0.restoreBackup(List.of(simpleTableItem, drinkItem)).get();
 
 		final var drinkExists = db0.get(Drink.class, DRINK_ID).get();
 		Assertions.assertNotNull(drinkExists);
@@ -272,11 +271,12 @@ final class DynamoDbIndexesTest {
 	}
 
 
-	private void checkResponseNameField(List<BackupDynamoItem> queryResult, Integer rank, List<String> names) {
+	private void checkResponseNameField(List<BackupItem> queryResult, Integer rank, List<String> names) {
 		var jsonMap = queryResult.get(rank).getItem();
 		ObjectMapper om = new ObjectMapper();
-		var itemMap = om.convertValue(jsonMap, new TypeReference<Map<String, Object>>(){});
-		Assertions.assertTrue(names.contains( ((HashMap<String, Object>) itemMap.get("item")).get("name")));
+		var itemMap = om.convertValue(jsonMap, new TypeReference<Map<String, Object>>() {
+		});
+		Assertions.assertTrue(names.contains(((HashMap<String, Object>) itemMap.get("item")).get("name")));
 	}
 
 	public static class Drink extends Table {

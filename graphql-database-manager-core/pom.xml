@@ -72,12 +72,7 @@
             <version>${junit.jupiter.version}</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>dynamodb</artifactId>
-        </dependency>
     </dependencies>
-
     <build>
         <plugins>
             <plugin>

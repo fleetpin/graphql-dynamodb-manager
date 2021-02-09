@@ -12,13 +12,12 @@
 
 package com.fleetpin.graphql.database.manager;
 
-import com.fleetpin.graphql.database.manager.util.BackupDynamoItem;
-
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.google.common.collect.HashMultimap;
 
 public abstract class DatabaseDriver {
@@ -35,9 +34,9 @@ public abstract class DatabaseDriver {
 
     public abstract <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key);
 
-    public abstract CompletableFuture<List<BackupDynamoItem>> restoreBackup(List<BackupDynamoItem> entities);
+    public abstract CompletableFuture<Void> restoreBackup(List<BackupItem> entities);
 
-    public abstract CompletableFuture<List<BackupDynamoItem>> makeBackup(String organisationId);
+    public abstract CompletableFuture<List<BackupItem>> takeBackup(String organisationId);
 
     public abstract <T extends Table> CompletableFuture<List<T>> queryHistory(DatabaseQueryHistoryKey<T> key);
 

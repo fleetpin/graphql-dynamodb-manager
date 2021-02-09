@@ -10,20 +10,20 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager.util;
+package com.fleetpin.graphql.database.manager.dynamo;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-
 import java.util.Map;
 
-public class BackupDynamoItem implements Comparable<BackupDynamoItem>{
+public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupItem {
 
 	private String table;
 	private Map<String, JsonNode> item;
@@ -33,27 +33,30 @@ public class BackupDynamoItem implements Comparable<BackupDynamoItem>{
 	private String organisationId;
 
 
-	public BackupDynamoItem() {
+	public DynamoBackupItem() {
 	}
 
-	public BackupDynamoItem(String table, Map<String, AttributeValue> item) {
+	public DynamoBackupItem(String table, Map<String, AttributeValue> item) {
 
 		ObjectMapper om = new ObjectMapper();
 		om.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
 		this.table = table;
-		this.item = (Map<String, JsonNode>) BaseTableUtil.convertTo(om, item, Map.class);
+		this.item = (Map<String, JsonNode>) TableUtil.convertTo(om, item, Map.class);
+		//Keep as separate object
+		this.item.remove("links");
+
 
 		this.links = HashMultimap.create();
 
 		var links = item.get("links");
-		if(links != null) {
+		if (links != null) {
 			links.m().forEach((t, value) -> {
 				this.links.putAll(t, value.ss());
 			});
 		}
 		this.id = item.get("id").s();
-		
+
 		this.organisationId = item.get("organisationId").s();
 	}
 
@@ -61,35 +64,27 @@ public class BackupDynamoItem implements Comparable<BackupDynamoItem>{
 	public String getTable() {
 		return table;
 	}
-	
+
 	public Map<String, JsonNode> getItem() {
 		return item;
 	}
 
 
-
 	@JsonIgnore
-	public Multimap<String, String> getLinks() {
+	public HashMultimap<String, String> getLinks() {
 		return links;
 	}
-	
+
 	public String getId() {
 		return id;
 	}
 
 	@Override
-	public int compareTo(BackupDynamoItem o) {
+	public int compareTo(DynamoBackupItem o) {
 		return getId().compareTo(o.getId());
 	}
 
-	public String getField(String tableTarget) {
-		var attribute = item.get(tableTarget);
-		if(attribute == null) {
-			return null;
-		}
-		return attribute.asText();
-	}
-	
+
 	public String getOrganisationId() {
 		return organisationId;
 	}
