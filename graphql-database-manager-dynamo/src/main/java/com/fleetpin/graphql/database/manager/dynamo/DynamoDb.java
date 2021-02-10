@@ -38,7 +38,6 @@ public class DynamoDb extends DatabaseDriver {
 	private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
 	private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
 	private static final int BATCH_WRITE_SIZE = 25;
-	public static final int DYNAMO_BATCH_SIZE = 25;
 
 	private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
 	private final String historyTable;
@@ -510,46 +509,41 @@ public class DynamoDb extends DatabaseDriver {
 	@Override
 	public CompletableFuture<Void> restoreBackup(List<BackupItem> entities) {
 
-		List<CompletableFuture<BatchWriteItemResponse>> completableFutures = new ArrayList<>();
-		List<BackupItem> batch = new ArrayList<>();
-		int batchCount = 0;
-		for (BackupItem entity : entities) {
-			batch.add(entity);
-			batchCount++;
-			if (batch.size() == DYNAMO_BATCH_SIZE || batchCount == entities.size()) {
-				List<WriteRequest> requests = new ArrayList<>();
+		List<CompletableFuture<BatchWriteItemResponse>> completableFutures =
+				Lists.partition(entities
+						.stream()
+						.map(
+								item -> {
+									return WriteRequest.builder().putRequest(builder ->
+											builder.item(TableUtil.toAttributes(mapper, item)).build()
+									).build();
+								})
+						.collect(Collectors.toList()), BATCH_WRITE_SIZE)
+						.stream()
+						.map(putRequestBatch -> {
+							final var batchPutRequest = BatchWriteItemRequest.builder()
+									.requestItems(Map.of(entityTable, putRequestBatch))
+									.build();
 
-				batch.forEach(item ->
-						requests.add(WriteRequest.builder()
-								.putRequest(builder ->
-										builder.item(TableUtil.toAttributes(mapper, item)).build()
-								).build()));
-
-				completableFutures.add(client.batchWriteItem(BatchWriteItemRequest
-								.builder()
-								.requestItems(Map.of(entityTable, requests))
-								.build()
-						).thenApply(
-						items -> {
-							do {
-								client.batchWriteItem(BatchWriteItemRequest
-										.builder()
-										.requestItems(items.unprocessedItems())
-										.build());
-							} while (items.unprocessedItems().size() > 0);
-							return items;
-						}
-						).exceptionally(failure -> {
-							if (failure.getCause() instanceof ConditionalCheckFailedException) {
-								throw new RevisionMismatchException(failure.getCause());
-							}
-							Throwables.throwIfUnchecked(failure);
-							throw new RuntimeException(failure);
-						})
-				);
-				batch.clear();
-			}
-		}
+							return client.batchWriteItem(batchPutRequest)
+									.thenApply(
+											items -> {
+												do {
+													client.batchWriteItem(BatchWriteItemRequest
+															.builder()
+															.requestItems(items.unprocessedItems())
+															.build());
+												} while (items.unprocessedItems().size() > 0);
+												return items;
+											}
+									).exceptionally(failure -> {
+										if (failure.getCause() instanceof ConditionalCheckFailedException) {
+											throw new RevisionMismatchException(failure.getCause());
+										}
+										Throwables.throwIfUnchecked(failure);
+										throw new RuntimeException(failure);
+									});
+						}).collect(Collectors.toList());
 
 		return CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[completableFutures.size()]));
 	}
