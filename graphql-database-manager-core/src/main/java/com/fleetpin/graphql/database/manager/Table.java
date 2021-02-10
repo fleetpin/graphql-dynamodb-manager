@@ -99,7 +99,7 @@ public abstract class Table {
 	
 	@JsonIgnore
 	@GraphQLIgnore
-	String getSourceOrganistaionId() {
+	String getSourceOrganisationId() {
 		return sourceOrganistaionId;
 	}
 

@@ -67,7 +67,7 @@ public class DynamoDb extends DatabaseDriver {
 		var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
 
 
-		String sourceOrganisation = getSourceOrganistaionId(entity);
+		String sourceOrganisation = getSourceOrganisationId(entity);
 
 		if (!sourceOrganisation.equals(organisationId)) {
 			//trying to delete a global or something just return without doing anything
@@ -85,17 +85,17 @@ public class DynamoDb extends DatabaseDriver {
 			return client.deleteItem(request -> request.tableName(entityTable).key(key).applyMutation(mutator -> {
 
 
-						String sourceOrganisationId = getSourceOrganistaionId(entity);
-						if (!sourceOrganisationId.equals(organisationId)) {
-							return;
-						}
-						if (entity.getRevision() == 0) { //we confirm row does not exist with a revision since entry might predate feature
-							mutator.conditionExpression("attribute_not_exists(revision)");
-						} else {
-							Map<String, AttributeValue> variables = new HashMap<>();
-							variables.put(":revision", AttributeValue.builder().n(Long.toString(entity.getRevision())).build());
-							//check exists and matches revision
-							mutator.expressionAttributeValues(variables);
+				String sourceOrganisationId = getSourceOrganisationId(entity);
+				if (!sourceOrganisationId.equals(organisationId)) {
+					return;
+				}
+				if (entity.getRevision() == 0) { //we confirm row does not exist with a revision since entry might predate feature
+					mutator.conditionExpression("attribute_not_exists(revision)");
+				} else {
+					Map<String, AttributeValue> variables = new HashMap<>();
+					variables.put(":revision", AttributeValue.builder().n(Long.toString(entity.getRevision())).build());
+					//check exists and matches revision
+					mutator.expressionAttributeValues(variables);
 							mutator.conditionExpression("revision = :revision");
 						}
 
@@ -167,7 +167,7 @@ public class DynamoDb extends DatabaseDriver {
 		}
 		return client.putItem(request -> request.tableName(entityTable).item(item).applyMutation(mutator -> {
 			if (check) {
-				String sourceOrganisationId = getSourceOrganistaionId(entity);
+				String sourceOrganisationId = getSourceOrganisationId(entity);
 
 				if (sourceTable != null && !sourceTable.equals(entityTable) || !sourceOrganisationId.equals(organisationId) || revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
 					mutator.conditionExpression("attribute_not_exists(revision)");
@@ -687,7 +687,7 @@ public class DynamoDb extends DatabaseDriver {
 		String extraConditions;
 
 		String sourceTable = getSourceTable(entity);
-		String sourceOrganisationId = getSourceOrganistaionId(entity);
+		String sourceOrganisationId = getSourceOrganisationId(entity);
 		//revision checks don't really work when reading from one env and writing to another, or read from global write to organisation.
 		//revision would only practically be empty if reading object before revision concept is present
 		if (sourceTable.equals(entityTable) && sourceOrganisationId.equals(organisationId) && entity.getRevision() != 0) {
@@ -866,7 +866,7 @@ public class DynamoDb extends DatabaseDriver {
 			if (sourceTable != null && !sourceTable.equals(entityTable)) {
 				return;
 			}
-			String sourceOrganisationId = getSourceOrganistaionId(entity);
+			String sourceOrganisationId = getSourceOrganisationId(entity);
 			if (!sourceOrganisationId.equals(organisationId)) {
 				return;
 			}
