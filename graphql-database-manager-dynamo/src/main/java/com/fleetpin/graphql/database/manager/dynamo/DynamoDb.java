@@ -956,8 +956,8 @@ public class DynamoDb extends DatabaseDriver {
 						.map(future -> future.thenApply(response -> response.unprocessedItems().size() > 0))
 						.reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> aBoolean || bBoolean))
 						.ifPresentOrElse(
-								future -> future.thenAccept(item -> {
-											deletedOrganisationFuture.complete(!item);
+								future -> future.thenAccept(failure -> {
+											deletedOrganisationFuture.complete(!failure);
 										}
 								),
 								() -> deletedOrganisationFuture.complete(false)
