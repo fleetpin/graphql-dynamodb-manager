@@ -953,10 +953,13 @@ public class DynamoDb extends DatabaseDriver {
 							});
 				})
 				.thenAccept(futures -> futures
-						.map(future -> future.thenApply(BatchWriteItemResponse::hasUnprocessedItems))
-						.reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> !aBoolean && !bBoolean))
+						.map(future -> future.thenApply(response -> response.unprocessedItems().size() > 0))
+						.reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> aBoolean || bBoolean))
 						.ifPresentOrElse(
-								future -> future.thenAccept(deletedOrganisationFuture::complete),
+								future -> future.thenAccept(item -> {
+											deletedOrganisationFuture.complete(!item);
+										}
+								),
 								() -> deletedOrganisationFuture.complete(false)
 						));
 
