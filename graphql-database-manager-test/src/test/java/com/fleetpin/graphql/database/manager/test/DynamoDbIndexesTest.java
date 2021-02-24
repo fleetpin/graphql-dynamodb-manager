@@ -35,14 +35,14 @@ import java.util.concurrent.ExecutionException;
 
 final class DynamoDbIndexesTest {
 
-
+	ObjectMapper mapper = new ObjectMapper();
 
 	@TestDatabase
 	void testGlobal(final Database db) throws InterruptedException, ExecutionException {
-		
+
 		var list = db.queryGlobal(SimpleTable.class, "john").get();
 		Assertions.assertEquals(0, list.size());
-		
+
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -186,90 +186,6 @@ final class DynamoDbIndexesTest {
 		final var nonExistent = db1.get(SimpleTable.class, putJohn.getId()).get();
 		Assertions.assertNull(nonExistent);
 	}
-
-
-	@TestDatabase
-	void testTakeBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
-
-		final var db0 = dynamoDbManager.getDatabase("organisation-0");
-		final var db1 = dynamoDbManager.getDatabase("organisation-1");
-		db0.start(new CompletableFuture<>());
-		db1.start(new CompletableFuture<>());
-
-		final var putAvocado = db0.put(new SimpleTable("avocado", "fruit")).get();
-		final var putBanana = db0.put(new SimpleTable("banana", "fruit")).get();
-		final var putBeer = db0.put(new Drink("Beer", true)).get();
-		final var putTomato = db1.put(new SimpleTable("tomato", "fruit")).get();
-
-
-		final var orgQuery1 = db0.takeBackup("organisation-0").get();
-		Assertions.assertNotNull(putAvocado);
-		Assertions.assertNotNull(putBanana);
-		Assertions.assertTrue(orgQuery1.size() == 3);
-		List<String> names = List.of(putBeer.getName(), putBanana.getName(), putAvocado.getName());
-
-		checkResponseNameField(orgQuery1, 0, names);
-		checkResponseNameField(orgQuery1, 1, names);
-		checkResponseNameField(orgQuery1, 2, names);
-
-		final var orgQuery2 = db1.takeBackup("organisation-1").get();
-		Assertions.assertNotNull(putTomato);
-		checkResponseNameField(orgQuery2, 0, List.of(putTomato.getName()));
-
-	}
-
-
-	@TestDatabase
-	void testRestoreBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
-		final String DRINK_ID = "1234";
-		final String SIMPLE_ID = "6789";
-
-		final var db0 = dynamoDbManager.getDatabase("organisation-0");
-		db0.start(new CompletableFuture<>());
-
-		Map<String, AttributeValue> drinkAttributes = new HashMap<>();
-		drinkAttributes.put("organisationId", AttributeValue.builder().s("organisation-0").build());
-		drinkAttributes.put("id", AttributeValue.builder().s("drinks:" + DRINK_ID).build());
-		Map<String, AttributeValue> items = new HashMap<>();
-		items.put("revision", AttributeValue.builder().s("1").build());
-		items.put("name", AttributeValue.builder().s("Beer").build());
-		items.put("alcoholic", AttributeValue.builder().bool(true).build());
-		items.put("id", AttributeValue.builder().s("drinks:" + DRINK_ID).build());
-		drinkAttributes.put("item", AttributeValue.builder().m(items).build());
-
-
-		Map<String, AttributeValue> simpleTableAttributes = new HashMap<>();
-		simpleTableAttributes.put("organisationId", AttributeValue.builder().s("organisation-0").build());
-		simpleTableAttributes.put("id", AttributeValue.builder().s("simpletables:" + SIMPLE_ID).build());
-		items.clear();
-		items.put("revision", AttributeValue.builder().s("1").build());
-		items.put("name", AttributeValue.builder().s("avocado").build());
-		items.put("globalLookup", AttributeValue.builder().s("fruit").build());
-		items.put("id", AttributeValue.builder().s("simpletables:" + SIMPLE_ID).build());
-		simpleTableAttributes.put("item", AttributeValue.builder().m(items).build());
-		Map<String, AttributeValue> links = new HashMap<>();
-		links.put("workflows", AttributeValue.builder().ss("workflowId123").build());
-		simpleTableAttributes.put("links", AttributeValue.builder().m(links).build());
-
-		BackupItem drinkItem = new DynamoBackupItem("table", drinkAttributes);
-		BackupItem simpleTableItem = new DynamoBackupItem("table", simpleTableAttributes);
-
-		db0.restoreBackup(List.of(simpleTableItem, drinkItem)).get();
-
-		final var drinkExists = db0.get(Drink.class, DRINK_ID).get();
-		Assertions.assertNotNull(drinkExists);
-
-		Assertions.assertEquals("Beer", drinkExists.getName());
-		Assertions.assertEquals(true, drinkExists.getAlcoholic());
-
-		final var simpleTableExists = db0.get(SimpleTable.class, SIMPLE_ID).get();
-		Assertions.assertNotNull(simpleTableExists);
-
-		Assertions.assertEquals("avocado", simpleTableExists.getName());
-		Assertions.assertEquals("fruit", simpleTableExists.getGlobalLookup());
-
-	}
-
 
 	private void checkResponseNameField(List<BackupItem> queryResult, Integer rank, List<String> names) {
 		var jsonMap = queryResult.get(rank).getItem();

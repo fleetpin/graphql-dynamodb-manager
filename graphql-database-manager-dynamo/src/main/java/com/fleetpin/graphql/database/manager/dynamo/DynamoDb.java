@@ -577,7 +577,7 @@ public class DynamoDb extends DatabaseDriver {
 		).subscribe(response -> {
 			response.items().forEach(
 					item -> {
-						toReturn.add(new DynamoBackupItem(table, item));
+						toReturn.add(new DynamoBackupItem(table, item, mapper));
 					});
 
 		}).thenApply(__ -> {

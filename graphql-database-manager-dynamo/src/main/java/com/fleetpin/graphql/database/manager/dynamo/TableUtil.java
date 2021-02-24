@@ -17,6 +17,7 @@ import java.io.UncheckedIOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -29,6 +30,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -45,6 +47,7 @@ import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.LinkedHashMultimap;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructList;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructMap;
@@ -106,13 +109,14 @@ public class TableUtil {
 		Map<String, AttributeValue> entries = new HashMap<>();
 		//Handle links specially, so remove here
 		var entityItem = entity.getItem();
-		HashMultimap<String, String> links = entity.getLinks();
+		JsonNode links = (JsonNode) entityItem.get("links");
 
 		if (links != null) {
 			entityItem.remove("links");
 			Map<String, AttributeValue> linkMap = new HashMap<>();
-			entity.getLinks().asMap().forEach((key, value) -> {
-				linkMap.put(key, AttributeValue.builder().ss(value).build());
+			links.fields().forEachRemaining(element -> {
+				linkMap.put(element.getKey(), AttributeValue.builder().ss(mapper.convertValue(element.getValue(), new TypeReference<String[]>() {
+				})).build());
 			});
 			entries.put("links", AttributeValue.builder().m(linkMap).build());
 		}

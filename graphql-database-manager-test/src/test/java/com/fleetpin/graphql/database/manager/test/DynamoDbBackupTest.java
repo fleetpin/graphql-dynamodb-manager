@@ -37,6 +37,8 @@ import java.util.concurrent.ExecutionException;
 final class DynamoDbBackupTest {
 
 
+	private ObjectMapper mapper = new ObjectMapper();
+
 	@TestDatabase
 	void testTakeBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
 
@@ -100,8 +102,8 @@ final class DynamoDbBackupTest {
 		links.put("workflows", AttributeValue.builder().ss("workflowId123").build());
 		simpleTableAttributes.put("links", AttributeValue.builder().m(links).build());
 
-		BackupItem drinkItem = new DynamoBackupItem("table", drinkAttributes);
-		BackupItem simpleTableItem = new DynamoBackupItem("table", simpleTableAttributes);
+		BackupItem drinkItem = new DynamoBackupItem("table", drinkAttributes, mapper);
+		BackupItem simpleTableItem = new DynamoBackupItem("table", simpleTableAttributes, mapper);
 
 		db0.restoreBackup(List.of(simpleTableItem, drinkItem)).get();
 
