@@ -36,13 +36,12 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 	public DynamoBackupItem() {
 	}
 
-	public DynamoBackupItem(String table, Map<String, AttributeValue> item) {
+	public DynamoBackupItem(String table, Map<String, AttributeValue> item, ObjectMapper objectMapper) {
 
-		ObjectMapper om = new ObjectMapper();
-		om.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+		objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
 		this.table = table;
-		this.item = (Map<String, JsonNode>) TableUtil.convertTo(om, item, Map.class);
+		this.item = (Map<String, JsonNode>) TableUtil.convertTo(objectMapper, item, Map.class);
 
 
 		this.links = HashMultimap.create();
