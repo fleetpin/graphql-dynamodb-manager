@@ -198,7 +198,7 @@ public class TableUtil {
 		}
 	}
 
-	public static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
+	static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
 		try {
 			ObjectNode objNode = mapper.createObjectNode();
 			item.forEach((key, v) -> {
