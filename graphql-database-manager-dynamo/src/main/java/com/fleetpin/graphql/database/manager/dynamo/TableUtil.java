@@ -109,14 +109,14 @@ public class TableUtil {
 		Map<String, AttributeValue> entries = new HashMap<>();
 		//Handle links specially, so remove here
 		var entityItem = entity.getItem();
-		JsonNode links = (JsonNode) entityItem.get("links");
+		LinkedHashMap<String, String[]> links = mapper.convertValue(entityItem.get("links"), new TypeReference<>() {
+		});
 
 		if (links != null) {
 			entityItem.remove("links");
 			Map<String, AttributeValue> linkMap = new HashMap<>();
-			links.fields().forEachRemaining(element -> {
-				linkMap.put(element.getKey(), AttributeValue.builder().ss(mapper.convertValue(element.getValue(), new TypeReference<String[]>() {
-				})).build());
+			links.forEach((key, value) -> {
+				linkMap.put(key, AttributeValue.builder().ss(value).build());
 			});
 			entries.put("links", AttributeValue.builder().m(linkMap).build());
 		}
