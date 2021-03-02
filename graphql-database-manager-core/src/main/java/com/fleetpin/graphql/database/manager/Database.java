@@ -102,6 +102,10 @@ public class Database {
 		return driver.restoreBackup(entities);
 	}
 
+	public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
+		return driver.delete(organisationId, clazz);
+	}
+
 	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String id) {
 		return driver.querySecondary(type, organisationId, id, items);
 	}
@@ -197,7 +201,8 @@ public class Database {
 
 	/**
 	 * Will only pass if the entity revision matches what is currently in the database
-	 * @param <T> database entity type to update
+	 *
+	 * @param <T>    database entity type to update
 	 * @param entity revision must match database or request will fail
 	 * @return updated entity with the revision incremented by one
 	 * CompletableFuture will fail with a RevisionMismatchException

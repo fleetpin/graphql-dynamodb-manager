@@ -143,6 +143,38 @@ final class DynamoDbBackupTest {
 	}
 
 	@TestDatabase
+	void testDeleteItems(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
+		final var db0 = dynamoDbManager.getDatabase("organisation-0");
+		final var db1 = dynamoDbManager.getDatabase("organisation-1");
+		db0.start(new CompletableFuture<>());
+		db1.start(new CompletableFuture<>());
+
+		db0.put(new SimpleTable("avocado", "fruit")).get();
+		db0.put(new Drink("Whisky", true)).get();
+		db0.put(new Drink("Wine", true)).get();
+		db0.put(new Drink("Gin", true)).get();
+		db0.put(new Drink("Vodka", true)).get();
+
+		db1.put(new SimpleTable("avocado", "fruit")).get();
+		db1.put(new Drink("Water", false)).get();
+
+		var destroyResponse = db0.delete("organisation-0", Drink.class).get();
+		Assertions.assertEquals(4, destroyResponse.size());
+
+		var drinkResponse0 = db0.query(Drink.class).get();
+		Assertions.assertEquals(0, drinkResponse0.size());
+
+		var simpleTableResponse = db0.query(SimpleTable.class).get();
+		Assertions.assertEquals(1, simpleTableResponse.size());
+
+		Assertions.assertEquals("avocado", simpleTableResponse.get(0).getName());
+		Assertions.assertEquals("fruit", simpleTableResponse.get(0).getGlobalLookup());
+
+		var drinkResponse1 = db1.query(Drink.class).get();
+		Assertions.assertEquals(1, drinkResponse1.size());
+	}
+
+	@TestDatabase
 	void testBatchDestroyOrganisation(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
 		final var db0 = dynamoDbManager.getDatabase("organisation-0");
 		final var db1 = dynamoDbManager.getDatabase("organisation-1");

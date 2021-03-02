@@ -59,6 +59,14 @@ public class DynamoDb extends DatabaseDriver {
 		this.idGenerator = idGenerator;
 	}
 
+
+	public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
+		var ofTypeKey = KeyFactory.createDatabaseQueryKey(organisationId, QueryBuilder.create(clazz).build());
+		var futureItems = query(ofTypeKey);
+		return futureItems.thenCompose(items ->
+				CompletableFutureUtil.sequence(items.stream().map(x -> delete(organisationId, x))));
+	}
+
 	public <T extends Table> CompletableFuture<T> delete(String organisationId, T entity) {
 
 

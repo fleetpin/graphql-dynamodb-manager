@@ -23,10 +23,12 @@ import com.google.common.collect.HashMultimap;
 public abstract class DatabaseDriver {
     public abstract <T extends Table> CompletableFuture<T> delete(String organisationId, T entity);
 
+    public abstract <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz);
+
     public abstract <T extends Table> CompletableFuture<T> deleteLinks(String organisationId, T entity);
 
     public abstract <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check);
-    
+
 
     public abstract <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys);
 
@@ -96,5 +98,5 @@ public abstract class DatabaseDriver {
         return new DatabaseKey<>(organisationId, type, id);
     }
 
-	
+
 }
