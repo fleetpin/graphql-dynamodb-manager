@@ -14,6 +14,7 @@ package com.fleetpin.graphql.database.manager;
 
 import com.fleetpin.graphql.database.manager.access.ForbiddenWriteException;
 import com.fleetpin.graphql.database.manager.access.ModificationPermission;
+import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import org.dataloader.DataLoader;
 import org.dataloader.DataLoaderOptions;
@@ -83,25 +84,38 @@ public class Database {
 	}
 	public <T extends Table> CompletableFuture<T> queryGlobalUnique(Class<T> type, String id) {
 		return queryGlobal(type, id).thenApply(items -> {
-			if(items.size() > 1) {
+			if (items.size() > 1) {
 				throw new RuntimeException("expected single linkage");
 			}
-			if(items.size() == 0) {
+			if (items.size() == 0) {
 				return null;
 			}
 			return items.get(0);
 		});
 	}
 
+	public CompletableFuture<List<BackupItem>> takeBackup(String organisationId) {
+		return driver.takeBackup(organisationId);
+	}
+
+	public CompletableFuture<Void> restoreBackup(List<BackupItem> entities) {
+		return driver.restoreBackup(entities);
+	}
+
+	public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
+		return driver.delete(organisationId, clazz);
+	}
+
 	public <T extends Table> CompletableFuture<List<T>> querySecondary(Class<T> type, String id) {
 		return driver.querySecondary(type, organisationId, id, items);
 	}
+
 	public <T extends Table> CompletableFuture<T> querySecondaryUnique(Class<T> type, String id) {
 		return querySecondary(type, id).thenApply(items -> {
-			if(items.size() > 1) {
+			if (items.size() > 1) {
 				throw new RuntimeException("expected single linkage");
 			}
-			if(items.size() == 0) {
+			if (items.size() == 0) {
 				return null;
 			}
 			return items.get(0);
@@ -187,7 +201,8 @@ public class Database {
 
 	/**
 	 * Will only pass if the entity revision matches what is currently in the database
-	 * @param <T> database entity type to update
+	 *
+	 * @param <T>    database entity type to update
 	 * @param entity revision must match database or request will fail
 	 * @return updated entity with the revision incremented by one
 	 * CompletableFuture will fail with a RevisionMismatchException

@@ -13,7 +13,7 @@ public interface TableAccess {
     }
 
     public static <T extends Table> String getTableSourceOrganisation(final T table) {
-        return table.getSourceOrganistaionId();
+        return table.getSourceOrganisationId();
     }
 
     public static <T extends Table> HashMultimap<String, String> getTableLinks(final T table) {

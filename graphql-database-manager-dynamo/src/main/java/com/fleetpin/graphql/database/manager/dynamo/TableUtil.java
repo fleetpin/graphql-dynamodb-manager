@@ -14,8 +14,10 @@ package com.fleetpin.graphql.database.manager.dynamo;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -28,6 +30,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -37,11 +40,14 @@ import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.LongNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
+import com.fleetpin.graphql.database.manager.util.BackupItem;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.LinkedHashMultimap;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructList;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructMap;
@@ -50,11 +56,11 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 public class TableUtil {
 
 	static String getSecondaryGlobal(Table entity) {
-		for(var method: entity.getClass().getMethods()) {
-			if(method.isAnnotationPresent(GlobalIndex.class)) {
+		for (var method : entity.getClass().getMethods()) {
+			if (method.isAnnotationPresent(GlobalIndex.class)) {
 				try {
 					var secondary = method.invoke(entity);
-					if(secondary instanceof Optional) {
+					if (secondary instanceof Optional) {
 						secondary = ((Optional) secondary).orElse(null);
 					}
 					return (String) secondary;
@@ -91,55 +97,85 @@ public class TableUtil {
 		fields.forEachRemaining(entry -> {
 			Entry<String, JsonNode> field = entry;
 			AttributeValue attribute = toAttribute(field.getValue());
-			if(attribute != null) {
+			if (attribute != null) {
 				entries.put(field.getKey(), attribute);
 			}
 		});
 		return entries;
-		
+
+	}
+
+	static Map<String, AttributeValue> toAttributes(ObjectMapper mapper, BackupItem entity) {
+		Map<String, AttributeValue> entries = new HashMap<>();
+		//Handle links specially, so remove here
+		var entityItem = entity.getItem();
+		LinkedHashMap<String, String[]> links = mapper.convertValue(entityItem.get("links"), new TypeReference<>() {
+		});
+
+		if (links != null) {
+			entityItem.remove("links");
+			Map<String, AttributeValue> linkMap = new HashMap<>();
+			links.forEach((key, value) -> {
+				linkMap.put(key, AttributeValue.builder().ss(value).build());
+			});
+			entries.put("links", AttributeValue.builder().m(linkMap).build());
+		}
+
+		ObjectNode tree = mapper.valueToTree(entityItem);
+
+		Iterator<Entry<String, JsonNode>> fields = tree.fields();
+		fields.forEachRemaining(entry -> {
+			Entry<String, JsonNode> field = entry;
+			AttributeValue attribute;
+			attribute = toAttribute(field.getValue());
+			if (attribute != null) {
+				entries.put(field.getKey(), attribute);
+			}
+		});
+
+		return entries;
 	}
 
 
 	static AttributeValue toAttribute(JsonNode value) {
-		switch(value.getNodeType()) {
-		case NUMBER:
-			return AttributeValue.builder().n(value.asText()).build();
-		case BINARY:
-			try {
-				return AttributeValue.builder().b(SdkBytes.fromByteArray(value.binaryValue())).build();
-			} catch (IOException e) {
-				throw new UncheckedIOException(e);
-			}
-		case BOOLEAN:
-			return AttributeValue.builder().bool(value.asBoolean()).build();
-		case STRING: 
-			String v = value.asText();
-			if(v.isEmpty()) {
-				return null;
-			}
-			return AttributeValue.builder().s(v).build();
-		case ARRAY: 
-			return processArray(value);
-		case OBJECT:
-			ObjectNode tree = (ObjectNode) value;
-			Map<String, AttributeValue> entries = new HashMap<>();
-			Iterator<Entry<String, JsonNode>> fields = tree.fields();
-			fields.forEachRemaining(entry -> {
-				Entry<String, JsonNode> field = entry;
-				entries.put(field.getKey(), toAttribute(field.getValue()));
-			});
-			return AttributeValue.builder().m(entries).build();
-		case NULL:
-			return AttributeValue.builder().nul(true).build();
-		default:
-			throw new RuntimeException("unknown type " + value.getNodeType());
+		switch (value.getNodeType()) {
+			case NUMBER:
+				return AttributeValue.builder().n(value.asText()).build();
+			case BINARY:
+				try {
+					return AttributeValue.builder().b(SdkBytes.fromByteArray(value.binaryValue())).build();
+				} catch (IOException e) {
+					throw new UncheckedIOException(e);
+				}
+			case BOOLEAN:
+				return AttributeValue.builder().bool(value.asBoolean()).build();
+			case STRING:
+				String v = value.asText();
+				if (v.isEmpty()) {
+					return null;
+				}
+				return AttributeValue.builder().s(v).build();
+			case ARRAY:
+				return processArray(value);
+			case OBJECT:
+				ObjectNode tree = (ObjectNode) value;
+				Map<String, AttributeValue> entries = new HashMap<>();
+				Iterator<Entry<String, JsonNode>> fields = tree.fields();
+				fields.forEachRemaining(entry -> {
+					Entry<String, JsonNode> field = entry;
+					entries.put(field.getKey(), toAttribute(field.getValue()));
+				});
+				return AttributeValue.builder().m(entries).build();
+			case NULL:
+				return AttributeValue.builder().nul(true).build();
+			default:
+				throw new RuntimeException("unknown type " + value.getNodeType());
 		}
 	}
 
 	private static AttributeValue processArray(JsonNode value) {
 		return basicArray(value);
 	}
-
 
 
 	private static AttributeValue basicArray(JsonNode value) {
@@ -151,8 +187,8 @@ public class TableUtil {
 		return StreamSupport.stream(Spliterators.spliteratorUnknownSize(array.iterator(), 0), false);
 	}
 
-	static <T> T convertTo(ObjectMapper mapper, AttributeValue attributeValue, Class<T> type) {
-		if(attributeValue == null) {
+	public static <T> T convertTo(ObjectMapper mapper, AttributeValue attributeValue, Class<T> type) {
+		if (attributeValue == null) {
 			return null;
 		}
 		try {
@@ -175,60 +211,60 @@ public class TableUtil {
 	}
 
 	private static JsonNode toJson(ObjectMapper mapper, AttributeValue value) {
-		if(value.bool() != null) {
+		if (value.bool() != null) {
 			return BooleanNode.valueOf(value.bool());
 		}
-		if(value.nul() != null && value.nul()) {
+		if (value.nul() != null && value.nul()) {
 			return NullNode.instance;
 		}
-		if(value.b() != null) {
+		if (value.b() != null) {
 			return BinaryNode.valueOf(value.b().asByteArray());
 		}
-		if(value.n() != null) {
+		if (value.n() != null) {
 			double v = Double.parseDouble(value.n());
-			if(Math.floor(v) == v && value.n().indexOf('.') == -1 && Long.MAX_VALUE < v && Long.MIN_VALUE > v) {
+			if (Math.floor(v) == v && value.n().indexOf('.') == -1 && Long.MAX_VALUE < v && Long.MIN_VALUE > v) {
 				return LongNode.valueOf(Long.parseLong(value.n()));
 			}
 			return DoubleNode.valueOf(v);
 		}
-		if(value.s() != null) {
+		if (value.s() != null) {
 			return TextNode.valueOf(value.s());
 		}
 
-		Object defArray =  DefaultSdkAutoConstructList.getInstance();
-		Object defMap =  DefaultSdkAutoConstructMap.getInstance();
-		if(value.bs() != defArray) {
+		Object defArray = DefaultSdkAutoConstructList.getInstance();
+		Object defMap = DefaultSdkAutoConstructMap.getInstance();
+		if (value.bs() != defArray) {
 			ArrayNode arrayNode = mapper.createArrayNode();
-			for(SdkBytes b: value.bs()) {
+			for (SdkBytes b : value.bs()) {
 				arrayNode.add(BinaryNode.valueOf(b.asByteArray()));
 			}
 			return arrayNode;
 		}
-		if(value.l() != defArray) {
+		if (value.l() != defArray) {
 			ArrayNode arrayNode = mapper.createArrayNode();
-			for(AttributeValue l: value.l()) {
-				arrayNode.add(toJson(mapper, l));	 
+			for (AttributeValue l : value.l()) {
+				arrayNode.add(toJson(mapper, l));
 			}
 			return arrayNode;
 		}
 
-		if(value.ns() != defArray) {
+		if (value.ns() != defArray) {
 			ArrayNode arrayNode = mapper.createArrayNode();
-			for(String s: value.ns()) {
+			for (String s : value.ns()) {
 				arrayNode.add(TextNode.valueOf(s));
 			}
 			return arrayNode;
 		}
-		if(value.ss() != defArray) {
+		if (value.ss() != defArray) {
 			ArrayNode arrayNode = mapper.createArrayNode();
-			for(String s: value.ss()) {
+			for (String s : value.ss()) {
 				arrayNode.add(TextNode.valueOf(s));
 			}
 			return arrayNode;
 		}
-		if(value.m() != defMap) {
+		if (value.m() != defMap) {
 			ObjectNode objNode = mapper.createObjectNode();
-			if(value.m().isEmpty()) {
+			if (value.m().isEmpty()) {
 				return NullNode.instance;
 			}
 			value.m().forEach((key, v) -> {
@@ -238,6 +274,7 @@ public class TableUtil {
 		}
 		throw new RuntimeException("Unsupported type " + value);
 	}
+
 
 	static <T> CompletableFuture<List<T>> all(List<CompletableFuture<T>> collect) {
 		return CompletableFuture.allOf(collect.toArray(CompletableFuture[]::new))
