@@ -15,19 +15,16 @@ package com.fleetpin.graphql.database.manager.dynamo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
-import com.google.common.primitives.UnsignedBytes;
-
-import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -36,7 +33,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
-import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 
 public class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
@@ -49,9 +45,11 @@ public class DynamoDb extends DatabaseDriver {
     private final DynamoDbAsyncClient client;
     private final ObjectMapper mapper;
     private final Supplier<String> idGenerator;
+
     public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
-    	this(mapper, entityTables, null, client, idGenerator);
+        this(mapper, entityTables, null, client, idGenerator);
     }
+
     public DynamoDb(ObjectMapper mapper, List<String> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
         this.mapper = mapper;
         this.entityTables = entityTables;
@@ -61,6 +59,14 @@ public class DynamoDb extends DatabaseDriver {
         this.idGenerator = idGenerator;
     }
 
+
+    public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
+        var ofTypeKey = KeyFactory.createDatabaseQueryKey(organisationId, QueryBuilder.create(clazz).build());
+        var futureItems = query(ofTypeKey);
+        return futureItems.thenCompose(items ->
+            CompletableFutureUtil.sequence(items.stream().map(x -> delete(organisationId, x))));
+    }
+
     public <T extends Table> CompletableFuture<T> delete(String organisationId, T entity) {
 
 
@@ -68,7 +74,7 @@ public class DynamoDb extends DatabaseDriver {
         var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
 
 
-        String sourceOrganisation = getSourceOrganistaionId(entity);
+        String sourceOrganisation = getSourceOrganisationId(entity);
 
         if (!sourceOrganisation.equals(organisationId)) {
             //trying to delete a global or something just return without doing anything
@@ -86,7 +92,7 @@ public class DynamoDb extends DatabaseDriver {
             return client.deleteItem(request -> request.tableName(entityTable).key(key).applyMutation(mutator -> {
                 
               
-                  String sourceOrganisationId = getSourceOrganistaionId(entity);
+                  String sourceOrganisationId = getSourceOrganisationId(entity);
                   if (!sourceOrganisationId.equals(organisationId)) {
                       return;
                   }
@@ -101,7 +107,7 @@ public class DynamoDb extends DatabaseDriver {
                   }
                   
               }
-                
+              
             )).thenApply(response -> {
                 return entity;
             });
@@ -136,9 +142,9 @@ public class DynamoDb extends DatabaseDriver {
         item.put("id", id);
         var entries = TableUtil.toAttributes(mapper, entity);
         entries.remove("revision"); // needs to be at the top level as a limit on dynamo to be able to perform an atomic addition
-        item.put("revision", AttributeValue.builder().n(Long.toString(revision + 1)).build()); 
+        item.put("revision", AttributeValue.builder().n(Long.toString(revision + 1)).build());
         if (HistoryCoreUtil.hasHistory(entity)) {
-        	item.put("history", AttributeValue.builder().bool(true).build());
+            item.put("history", AttributeValue.builder().bool(true).build());
         }
         item.put("item", AttributeValue.builder().m(entries).build());
 
@@ -167,12 +173,12 @@ public class DynamoDb extends DatabaseDriver {
             item.put("secondaryOrganisation", index);
         }
         return client.putItem(request -> request.tableName(entityTable).item(item).applyMutation(mutator -> {
-            if(check) {
-                String sourceOrganisationId = getSourceOrganistaionId(entity);
-               
-                if(sourceTable != null && !sourceTable.equals(entityTable) || !sourceOrganisationId.equals(organisationId) || revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
+            if (check) {
+                String sourceOrganisationId = getSourceOrganisationId(entity);
+
+                if (sourceTable != null && !sourceTable.equals(entityTable) || !sourceOrganisationId.equals(organisationId) || revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
                     mutator.conditionExpression("attribute_not_exists(revision)");
-                }else {
+                } else {
                     Map<String, AttributeValue> variables = new HashMap<>();
                     variables.put(":revision", AttributeValue.builder().n(Long.toString(revision)).build());
                     //check exists and matches revision
@@ -182,7 +188,7 @@ public class DynamoDb extends DatabaseDriver {
                 
             }
         })).exceptionally(failure -> {
-            if(failure.getCause() instanceof ConditionalCheckFailedException) {
+            if (failure.getCause() instanceof ConditionalCheckFailedException) {
                 throw new RevisionMismatchException(failure.getCause());
             }
             Throwables.throwIfUnchecked(failure);
@@ -227,7 +233,7 @@ public class DynamoDb extends DatabaseDriver {
         return client.batchGetItem(builder -> builder.requestItems(items)).thenApply(response -> {
             var responseItems = response.responses();
 
-            var flattener = new Flatterner(false);
+            var flattener = new Flattener(false);
             entityTables.forEach(table -> {
                 flattener.add(table, responseItems.get(table));
             });
@@ -261,19 +267,19 @@ public class DynamoDb extends DatabaseDriver {
         var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
 
         var futures = entityTables.stream()
-                .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
-                .map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
+            .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
+            .map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
 
         var future = CompletableFutureUtil.sequence(futures);
 
         return future.thenApply(results -> {
-            var flattener = new Flatterner(false);
+            var flattener = new Flattener(false);
 
             results.forEach(list -> flattener.addItems(list));
             return flattener.results(mapper, key.getQuery().getType(), Optional.ofNullable(key.getQuery().getLimit()));
         });
     }
-    
+
     @Override
     public <T extends Table> CompletableFuture<List<T>> queryHistory(DatabaseQueryHistoryKey<T> key) {
     	if (this.historyTable == null) {
@@ -340,7 +346,7 @@ public class DynamoDb extends DatabaseDriver {
     	
 		var starts = queryHistory.getStartsWith();
 		var idStarts  = AttributeValue.builder().s(table(queryHistory.getType()) + ":" + starts).build();
-		if ( queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null ) {    		
+		if ( queryHistory.getFromUpdatedAt() != null && queryHistory.getToUpdatedAt() != null ) {
             var from = queryHistory.getFromUpdatedAt().toEpochMilli();
             var to = queryHistory.getToUpdatedAt().toEpochMilli();
             var keyConditions = startsWithFromTo(starts, from, to, organisationIdType, "between");
@@ -417,7 +423,7 @@ public class DynamoDb extends DatabaseDriver {
             });
         }
         return future.thenApply(results -> {
-            var flattener = new Flatterner(true);
+            var flattener = new Flattener(true);
             results.forEach(list -> flattener.addItems(list));
             return flattener.results(mapper, type);
         });
@@ -430,8 +436,8 @@ public class DynamoDb extends DatabaseDriver {
 
         var toReturn = new ArrayList<DynamoItem>();
         return client.queryPaginator(r -> r.tableName(table).indexName("secondaryGlobal")
-                .keyConditionExpression("secondaryGlobal = :secondaryGlobal")
-                .expressionAttributeValues(keyConditions)
+            .keyConditionExpression("secondaryGlobal = :secondaryGlobal")
+            .expressionAttributeValues(keyConditions)
         ).subscribe(response -> {
             response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
         }).thenApply(__ -> {
@@ -467,9 +473,9 @@ public class DynamoDb extends DatabaseDriver {
 
         var toReturn = new ArrayList<String>();
         return client.queryPaginator(r -> r.tableName(table).indexName("secondaryOrganisation")
-                .keyConditionExpression("organisationId = :organisationId AND secondaryOrganisation = :secondaryOrganisation")
-                .expressionAttributeValues(keyConditions)
-                .projectionExpression("id")
+            .keyConditionExpression("organisationId = :organisationId AND secondaryOrganisation = :secondaryOrganisation")
+            .expressionAttributeValues(keyConditions)
+            .projectionExpression("id")
         ).subscribe(response -> {
             response.items().stream().map(item -> item.get("id").s()).map(itemId -> {
                 return itemId.substring(itemId.indexOf(':') + 1); //Id contains entity name
@@ -487,31 +493,111 @@ public class DynamoDb extends DatabaseDriver {
 
         var s = new DynamoQuerySubscriber(table, query.getLimit());
 
-       client.queryPaginator(r -> {
+        client.queryPaginator(r -> {
             r.tableName(table)
-                    .consistentRead(true)
-                    .keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
-                    .expressionAttributeValues(keyConditions)
-                    .applyMutation(b -> {
-                        if (query.getLimit() != null) {
-                            b.limit(query.getLimit());
-                        }
+                .consistentRead(true)
+                .keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
+                .expressionAttributeValues(keyConditions)
+                .applyMutation(b -> {
+                    if (query.getLimit() != null) {
+                        b.limit(query.getLimit());
+                    }
 
-                        if (query.getAfter() != null) {
-                            b.exclusiveStartKey(Map.of(
-                                    "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
-                                    "organisationId", organisationId));
-                        }
-                    });
+                    if (query.getAfter() != null) {
+                        b.exclusiveStartKey(Map.of(
+                            "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
+                            "organisationId", organisationId));
+                    }
+                });
         }).subscribe(s);
 
         return s.getFuture();
     }
-    
+
+    @Override
+    public CompletableFuture<Void> restoreBackup(List<BackupItem> entities) {
+
+        List<CompletableFuture<BatchWriteItemResponse>> completableFutures =
+            Lists.partition(entities
+                .stream()
+                .map(
+                    item -> {
+                        return WriteRequest.builder().putRequest(builder ->
+                            builder.item(TableUtil.toAttributes(mapper, item)).build()
+                        ).build();
+                    })
+                .collect(Collectors.toList()), BATCH_WRITE_SIZE)
+                .stream()
+                .map(putRequestBatch -> {
+                    final var batchPutRequest = BatchWriteItemRequest.builder()
+                        .requestItems(Map.of(entityTable, putRequestBatch))
+                        .build();
+
+                    return client.batchWriteItem(batchPutRequest)
+                        .thenApply(
+                            items -> {
+                                do {
+                                    client.batchWriteItem(BatchWriteItemRequest
+                                        .builder()
+                                        .requestItems(items.unprocessedItems())
+                                        .build());
+                                } while (items.unprocessedItems().size() > 0);
+                                return items;
+                            }
+                        ).exceptionally(failure -> {
+                            if (failure.getCause() instanceof ConditionalCheckFailedException) {
+                                throw new RevisionMismatchException(failure.getCause());
+                            }
+                            Throwables.throwIfUnchecked(failure);
+                            throw new RuntimeException(failure);
+                        });
+                }).collect(Collectors.toList());
+
+        return CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[completableFutures.size()]));
+    }
+
+    @Override
+    public CompletableFuture<List<BackupItem>> takeBackup(String organisationId) {
+
+        CompletableFuture<List<List<BackupItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
+        AttributeValue orgId = AttributeValue.builder().s(organisationId).build();
+        for (var table : entityTables) {
+            future = future.thenCombine(takeBackup(table, orgId), (a, b) -> {
+                a.add(b);
+                return a;
+            });
+        }
+
+        return future.thenApply(results -> {
+            return results.stream().flatMap(List::stream).collect(Collectors.toList());
+        });
+    }
+
+
+    private CompletableFuture<List<BackupItem>> takeBackup(String table, AttributeValue organisationId) {
+        Map<String, AttributeValue> keyConditions = new HashMap<>();
+        keyConditions.put(":organisationId", organisationId);
+        var toReturn = new ArrayList<BackupItem>();
+        return client.queryPaginator(r -> r.tableName(table)
+            .consistentRead(true)
+            .keyConditionExpression("organisationId = :organisationId")
+            .expressionAttributeValues(keyConditions)
+        ).subscribe(response -> {
+            response.items().forEach(
+                item -> {
+                    toReturn.add(new DynamoBackupItem(table, item, mapper));
+                });
+
+        }).thenApply(__ -> {
+            return toReturn;
+        });
+    }
+
+
     private CompletableFuture<?> removeLinks(AttributeValue organisationIdAttribute, String fromTable, Set<String> fromIds, String targetTable, String targetId) {
 
         var targetIdAttribute = AttributeValue.builder().ss(targetId).build();
-        var futures = fromIds.stream().map(fromId ->  {
+        var futures = fromIds.stream().map(fromId -> {
             var fromIdAttribute = AttributeValue.builder().s(fromTable + ":" + fromId).build();
             Map<String, AttributeValue> targetKey = new HashMap<>();
             targetKey.put("organisationId", organisationIdAttribute);
@@ -535,7 +621,7 @@ public class DynamoDb extends DatabaseDriver {
         
         var targetIdAttribute = AttributeValue.builder().ss(targetId).build();
 
-        var futures = fromIds.stream().map(fromId ->  {
+        var futures = fromIds.stream().map(fromId -> {
             var fromIdAttribute = AttributeValue.builder().s(fromTable + ":" + fromId).build();
             Map<String, AttributeValue> targetKey = new HashMap<>();
             targetKey.put("organisationId", organisationIdAttribute);
@@ -603,13 +689,13 @@ public class DynamoDb extends DatabaseDriver {
         String extraConditions;
         
         String sourceTable = getSourceTable(entity);
-        String sourceOrganisationId = getSourceOrganistaionId(entity);
+        String sourceOrganisationId = getSourceOrganisationId(entity);
         //revision checks don't really work when reading from one env and writing to another, or read from global write to organisation.
         //revision would only practically be empty if reading object before revision concept is present
         if (sourceTable.equals(entityTable) && sourceOrganisationId.equals(organisationId) && entity.getRevision() != 0) {
             values.put(":revision", AttributeValue.builder().n(Long.toString(entity.getRevision())).build());
             extraConditions = " AND revision = :revision";
-        }else {
+        } else {
             extraConditions = "";
         }
 
@@ -642,7 +728,7 @@ public class DynamoDb extends DatabaseDriver {
             entity.setRevision(Long.parseLong(response.attributes().get("revision").n()));
             return entity;
         }).exceptionally(failure -> {
-            if(failure.getCause() instanceof ConditionalCheckFailedException) {
+            if (failure.getCause() instanceof ConditionalCheckFailedException) {
                 throw new RevisionMismatchException(failure.getCause());
             }
             Throwables.throwIfUnchecked(failure);
@@ -727,39 +813,39 @@ public class DynamoDb extends DatabaseDriver {
                         .stream()
                         .filter(entry -> !entry.getValue().contains(targetId) && !entry.getKey().equals(table(clazz)))
                         .collect(Collectors.toMap(
-                                Map.Entry::getKey,
-                                entry -> AttributeValue.builder().ss(entry.getValue()).build()
+                            Map.Entry::getKey,
+                            entry -> AttributeValue.builder().ss(entry.getValue()).build()
                         ))).build();
 
         // It would be nice to pull the revision logic out
         final var revisionNumber = entity.getRevision() != 0 ?
-                                   String.valueOf(entity.getRevision() + Integer.parseInt(REVISION_INCREMENT.n())) :
-                                   "0";
+            String.valueOf(entity.getRevision() + Integer.parseInt(REVISION_INCREMENT.n())) :
+            "0";
 
         final var revision = AttributeValueUpdate.builder()
                 .action(AttributeAction.PUT)
                 .value(
-                        AttributeValue.builder()
-                                .n(revisionNumber)
-                                .build()
+                    AttributeValue.builder()
+                        .n(revisionNumber)
+                        .build()
                 )
                 .build();
 
         final var linksAttributeMap = Map.of(
-                "revision", revision,
-                "links", AttributeValueUpdate.builder().action(AttributeAction.PUT).value(linkMap).build()
+            "revision", revision,
+            "links", AttributeValueUpdate.builder().action(AttributeAction.PUT).value(linkMap).build()
         );
 
         final Map<String, AttributeValue> entityItem = Map.of(
-                "organisationId", AttributeValue.builder().s(organisationId).build(),
-                "id", AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build()
+            "organisationId", AttributeValue.builder().s(organisationId).build(),
+            "id", AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build()
         );
 
         return UpdateItemRequest.builder()
-                .tableName(entityTable)
-                .key(entityItem)
-                .attributeUpdates(linksAttributeMap)
-                .build();
+            .tableName(entityTable)
+            .key(entityItem)
+            .attributeUpdates(linksAttributeMap)
+            .build();
     }
 
     public <T extends Table> CompletableFuture<T> deleteLinks(String organisationId, T entity) {
@@ -782,13 +868,13 @@ public class DynamoDb extends DatabaseDriver {
             if (sourceTable != null && !sourceTable.equals(entityTable)) {
                 return;
             }
-            String sourceOrganisationId = getSourceOrganistaionId(entity);
+            String sourceOrganisationId = getSourceOrganisationId(entity);
             if (!sourceOrganisationId.equals(organisationId)) {
                 return;
             }
             if(revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
                 mutator.conditionExpression("attribute_not_exists(revision)");
-            }else {
+            } else {
                 values.put(":revision", AttributeValue.builder().n(Long.toString(entity.getRevision())).build());
                 mutator.conditionExpression("revision = :revision");
             }
@@ -796,7 +882,7 @@ public class DynamoDb extends DatabaseDriver {
             entity.setRevision(Long.parseLong(response.attributes().get("revision").n()));
             return entity;
         }).exceptionally(failure -> {
-            if(failure.getCause() instanceof ConditionalCheckFailedException) {
+            if (failure.getCause() instanceof ConditionalCheckFailedException) {
                 throw new RevisionMismatchException(failure.getCause());
             }
             Throwables.throwIfUnchecked(failure);
@@ -875,12 +961,15 @@ public class DynamoDb extends DatabaseDriver {
                             });
                 })
                 .thenAccept(futures -> futures
-                        .map(future -> future.thenApply(BatchWriteItemResponse::hasUnprocessedItems))
-                        .reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> !aBoolean && !bBoolean))
-                        .ifPresentOrElse(
-                                future -> future.thenAccept(deletedOrganisationFuture::complete),
-                                () -> deletedOrganisationFuture.complete(false)
-                        ));
+                    .map(future -> future.thenApply(response -> response.unprocessedItems().size() > 0))
+                    .reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> aBoolean || bBoolean))
+                    .ifPresentOrElse(
+                        future -> future.thenAccept(failure -> {
+                                deletedOrganisationFuture.complete(!failure);
+                            }
+                        ),
+                        () -> deletedOrganisationFuture.complete(false)
+                    ));
 
         return deletedOrganisationFuture;
     }

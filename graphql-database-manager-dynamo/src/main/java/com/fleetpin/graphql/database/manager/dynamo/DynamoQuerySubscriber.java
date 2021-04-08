@@ -1,8 +1,5 @@
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import com.fleetpin.graphql.database.manager.Query;
-import com.fleetpin.graphql.database.manager.Table;
-import com.fleetpin.graphql.database.manager.util.CompletableFutureCollector;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
@@ -10,7 +7,6 @@ import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DynamoQuerySubscriber implements Subscriber<QueryResponse> {

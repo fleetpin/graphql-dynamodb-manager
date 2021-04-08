@@ -12,28 +12,37 @@
 
 package com.fleetpin.graphql.database.manager.test;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
+import com.fleetpin.graphql.database.manager.dynamo.DynamoBackupItem;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
+import com.fleetpin.graphql.database.manager.util.BackupItem;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 final class DynamoDbIndexesTest {
 
+	ObjectMapper mapper = new ObjectMapper();
+
 	@TestDatabase
 	void testGlobal(final Database db) throws InterruptedException, ExecutionException {
-		
+
 		var list = db.queryGlobal(SimpleTable.class, "john").get();
 		Assertions.assertEquals(0, list.size());
-		
+
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
@@ -178,6 +187,36 @@ final class DynamoDbIndexesTest {
 		Assertions.assertNull(nonExistent);
 	}
 
+	private void checkResponseNameField(List<BackupItem> queryResult, Integer rank, List<String> names) {
+		var jsonMap = queryResult.get(rank).getItem();
+		ObjectMapper om = new ObjectMapper();
+		var itemMap = om.convertValue(jsonMap, new TypeReference<Map<String, Object>>() {
+		});
+		Assertions.assertTrue(names.contains(((HashMap<String, Object>) itemMap.get("item")).get("name")));
+	}
+
+	public static class Drink extends Table {
+		private String name;
+		private Boolean alcoholic;
+
+
+		public Drink(){}
+
+		public Drink(String name, Boolean alcoholic) {
+			this.name = name;
+			this.alcoholic = alcoholic;
+		}
+
+		public String getName() {
+			return name;
+		}
+
+		public Boolean getAlcoholic() {
+			return alcoholic;
+		}
+
+	}
+
 	public static class SimpleTable extends Table {
 		private String name;
 		private String globalLookup;
@@ -190,6 +229,7 @@ final class DynamoDbIndexesTest {
 			this.globalLookup = globalLookup;
 		}
 
+
 		@SecondaryIndex
 		public String getName() {
 			return name;
@@ -199,5 +239,6 @@ final class DynamoDbIndexesTest {
 		public String getGlobalLookup() {
 			return globalLookup;
 		}
+
 	}
 }

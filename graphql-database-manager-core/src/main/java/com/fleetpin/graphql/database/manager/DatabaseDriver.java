@@ -17,22 +17,29 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.google.common.collect.HashMultimap;
 
 public abstract class DatabaseDriver {
     public abstract <T extends Table> CompletableFuture<T> delete(String organisationId, T entity);
 
+    public abstract <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz);
+
     public abstract <T extends Table> CompletableFuture<T> deleteLinks(String organisationId, T entity);
 
     public abstract <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check);
-    
+
 
     public abstract <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys);
 
     public abstract <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items);
 
     public abstract <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key);
-    
+
+    public abstract CompletableFuture<Void> restoreBackup(List<BackupItem> entities);
+
+    public abstract CompletableFuture<List<BackupItem>> takeBackup(String organisationId);
+
     public abstract <T extends Table> CompletableFuture<List<T>> queryHistory(DatabaseQueryHistoryKey<T> key);
 
     public abstract <T extends Table> CompletableFuture<List<T>> queryGlobal(Class<T> type, String value);
@@ -42,10 +49,10 @@ public abstract class DatabaseDriver {
     public abstract <T extends Table> CompletableFuture<T> link(String organisationId, T entry, Class<? extends Table> class1, List<String> groupIds);
 
     public abstract <T extends Table> CompletableFuture<T> unlink(
-            final String organisationId,
-            final T entity,
-            final Class<? extends Table> clazz,
-            final String targetId
+        final String organisationId,
+        final T entity,
+        final Class<? extends Table> clazz,
+        final String targetId
     );
 
     public abstract int maxBatchSize();
@@ -54,8 +61,8 @@ public abstract class DatabaseDriver {
 
     public abstract CompletableFuture<Boolean> destroyOrganisation(final String organisationId);
 
-    protected <T extends Table> String getSourceOrganistaionId(final T entity) {
-        return entity.getSourceOrganistaionId();
+    protected <T extends Table> String getSourceOrganisationId(final T entity) {
+        return entity.getSourceOrganisationId();
     }
 
     protected <T extends Table> void setLinks(final T entity, final String type, final Collection<String> groupIds) {
@@ -91,5 +98,5 @@ public abstract class DatabaseDriver {
         return new DatabaseKey<>(organisationId, type, id);
     }
 
-	
+
 }
