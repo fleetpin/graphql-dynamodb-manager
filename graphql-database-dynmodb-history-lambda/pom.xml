@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>com.fleetpin</groupId>
 		<artifactId>graphql-database-manager</artifactId>
-		<version>0.2.17-SNAPSHOT</version>
+		<version>0.2.17</version>
 	</parent>
 
 	<artifactId>graphql-database-dynmodb-history-lambda</artifactId>
@@ -40,7 +40,7 @@
 		<url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
 		<connection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</connection>
 		<developerConnection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</developerConnection>
-		<tag>HEAD</tag>
+		<tag>graphql-database-manager-0.2.17</tag>
 	</scm>
 
 	<licenses>
