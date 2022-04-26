@@ -1,6 +1,7 @@
 package com.fleetpin.graphql.database.manager;
 
 import java.util.Objects;
+import java.util.Optional;
 
 public class Query<T extends Table> {
 
@@ -8,8 +9,9 @@ public class Query<T extends Table> {
 	private final String startsWith;
 	private final String after;
 	private final Integer limit;
+	private final Optional<Integer> parallelRequests;
 
-	Query(Class<T> type, String startsWith, String after, Integer limit) {
+	Query(Class<T> type, String startsWith, String after, Integer limit, Optional<Integer> parallelRequests) {
 		if (type == null) {
 			throw new RuntimeException("type can not be null, did you forget to call .on(Table::class)?");
 		}
@@ -17,6 +19,7 @@ public class Query<T extends Table> {
 		this.startsWith = startsWith;
 		this.after = after;
 		this.limit = limit;
+		this.parallelRequests = parallelRequests;
 	}
 
 	public Class<T> getType() {
@@ -30,6 +33,8 @@ public class Query<T extends Table> {
 	public String getAfter() {
 		return after;
 	}
+
+	public Optional<Integer> getParallelRequestCount() { return parallelRequests}
 
 
 	public Integer getLimit() {

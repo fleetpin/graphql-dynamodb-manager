@@ -55,6 +55,8 @@ public abstract class DatabaseDriver {
         final String targetId
     );
 
+    public abstract int maxParallelisation();
+
     public abstract int maxBatchSize();
 
     public abstract String newId();

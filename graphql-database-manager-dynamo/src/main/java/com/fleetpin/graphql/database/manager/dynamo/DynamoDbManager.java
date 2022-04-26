@@ -12,12 +12,9 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
@@ -29,6 +26,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.database.manager.DatabaseDriver;
 import com.fleetpin.graphql.database.manager.DatabaseManager;
+import com.fleetpin.graphql.database.manager.EntityTable;
 import com.google.common.base.Preconditions;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -54,7 +52,7 @@ public final class DynamoDbManager extends DatabaseManager {
 	public static class DyanmoDbManagerBuilder {
 		private DynamoDbAsyncClient client;
 		private ObjectMapper mapper;
-		private List<String> tables;
+		private List<EntityTable> tables;
 		private Supplier<String> idGenerator;
 		private DatabaseDriver database;
 		private String historyTable;
@@ -71,14 +69,19 @@ public final class DynamoDbManager extends DatabaseManager {
 			return this;
 		}
 
+		public DyanmoDbManagerBuilder tables(EntityTable... tables) {
+			this.tables = Arrays.asList(tables);
+			return this;
+		}
+
 
 		public DyanmoDbManagerBuilder tables(List<String> tables) {
-			this.tables = tables;
+			this.tables = tables.stream().map(t -> new EntityTable(t, Optional.empty())).collect(Collectors.toList());
 			return this;
 		}
 		
 		public DyanmoDbManagerBuilder tables(String... tables) {
-			this.tables = Arrays.asList(tables);
+			this.tables = Arrays.stream(tables).map(t -> new EntityTable(t, Optional.empty())).collect(Collectors.toList());
 			return this;
 		}
 		

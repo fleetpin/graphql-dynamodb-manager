@@ -39,18 +39,19 @@ public class DynamoDb extends DatabaseDriver {
     private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
     private static final int BATCH_WRITE_SIZE = 25;
 
-    private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
+    private final List<EntityTable> entityTables; //is in reverse order so easy to over ride as we go through
     private final String historyTable;
-    private final String entityTable;
+    private final EntityTable entityTable;
     private final DynamoDbAsyncClient client;
     private final ObjectMapper mapper;
     private final Supplier<String> idGenerator;
+    private AttributeValue.Builder builder;
 
-    public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
+    public DynamoDb(ObjectMapper mapper, List<EntityTable> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
         this(mapper, entityTables, null, client, idGenerator);
     }
 
-    public DynamoDb(ObjectMapper mapper, List<String> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
+    public DynamoDb(ObjectMapper mapper, List<EntityTable> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
         this.mapper = mapper;
         this.entityTables = entityTables;
         this.historyTable = historyTable;
@@ -89,7 +90,7 @@ public class DynamoDb extends DatabaseDriver {
             key.put("organisationId", organisationIdAttribute);
             key.put("id", id);
 
-            return client.deleteItem(request -> request.tableName(entityTable).key(key).applyMutation(mutator -> {
+            return client.deleteItem(request -> request.tableName(entityTable.getName()).key(key).applyMutation(mutator -> {
                 
               
                   String sourceOrganisationId = getSourceOrganisationId(entity);
@@ -118,7 +119,7 @@ public class DynamoDb extends DatabaseDriver {
             item.put("id", id);
             item.put("deleted", AttributeValue.builder().bool(true).build());
 
-            return client.putItem(request -> request.tableName(entityTable).item(item)).thenApply(response -> {
+            return client.putItem(request -> request.tableName(entityTable.getName()).item(item)).thenApply(response -> {
                 return entity;
             });
         }
@@ -158,7 +159,7 @@ public class DynamoDb extends DatabaseDriver {
         String sourceTable = getSourceTable(entity);
         
         item.put("links", AttributeValue.builder().m(links).build());
-        setSource(entity, entityTable, getLinks(entity), organisationId);
+        setSource(entity, entityTable.getName(), getLinks(entity), organisationId);
 
         String secondaryOrganisation = TableUtil.getSecondaryOrganisation(entity);
         String secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
@@ -172,7 +173,11 @@ public class DynamoDb extends DatabaseDriver {
             var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryOrganisation).build();
             item.put("secondaryOrganisation", index);
         }
-        return client.putItem(request -> request.tableName(entityTable).item(item).applyMutation(mutator -> {
+//        if (parallel) {
+//            var hashthing = hashthinggg
+//            item.put(parallelQueryField, hashthing)
+//        }
+        return client.putItem(request -> request.tableName(entityTable.getName()).item(item).applyMutation(mutator -> {
             if (check) {
                 String sourceOrganisationId = getSourceOrganisationId(entity);
 
@@ -204,6 +209,10 @@ public class DynamoDb extends DatabaseDriver {
         return 50 / entityTables.size();
     }
 
+    @Override
+    public int maxParallelisation() {
+        return 1024;
+    }
 
     @Override
     public <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys) {
@@ -227,15 +236,15 @@ public class DynamoDb extends DatabaseDriver {
 
         Map<String, KeysAndAttributes> items = new HashMap<>();
 
-        for (String table : this.entityTables) {
-            items.put(table, KeysAndAttributes.builder().keys(entries).consistentRead(true).build());
+        for (EntityTable table : this.entityTables) {
+            items.put(table.getName(), KeysAndAttributes.builder().keys(entries).consistentRead(true).build());
         }
         return client.batchGetItem(builder -> builder.requestItems(items)).thenApply(response -> {
             var responseItems = response.responses();
 
             var flattener = new Flattener(false);
             entityTables.forEach(table -> {
-                flattener.add(table, responseItems.get(table));
+                flattener.add(table.getName(), responseItems.get(table));
             });
             var toReturn = new ArrayList<T>();
             for (var key : keys) {
@@ -262,13 +271,21 @@ public class DynamoDb extends DatabaseDriver {
 
     @Override
     public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key) {
+        var parrallelRequestCount = key.getQuery().getParallelRequestCount();
+
+        if (parrallelRequestCount.isPresent()) {
+
+        }
+
+
+
         var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
         String prefix = Optional.ofNullable(key.getQuery().getStartsWith()).orElse("");
         var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
 
         var futures = entityTables.stream()
             .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
-            .map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
+            .map(pair -> query(pair.getKey().getName(), pair.getValue(), id, key.getQuery()));
 
         var future = CompletableFutureUtil.sequence(futures);
 
@@ -417,7 +434,7 @@ public class DynamoDb extends DatabaseDriver {
 
         CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
         for (var table : entityTables) {
-            future = future.thenCombine(queryGlobal(table, id), (a, b) -> {
+            future = future.thenCombine(queryGlobal(table.getName(), id), (a, b) -> {
                 a.add(b);
                 return a;
             });
@@ -452,7 +469,7 @@ public class DynamoDb extends DatabaseDriver {
 
         CompletableFuture<Set<String>> future = CompletableFuture.completedFuture(new HashSet<>());
         for (var table : entityTables) {
-            future = future.thenCombine(querySecondary(table, organisationIdAttribute, id), (a, b) -> {
+            future = future.thenCombine(querySecondary(table.getName(), organisationIdAttribute, id), (a, b) -> {
                 a.addAll(b);
                 return a;
             });
@@ -530,7 +547,7 @@ public class DynamoDb extends DatabaseDriver {
                 .stream()
                 .map(putRequestBatch -> {
                     final var batchPutRequest = BatchWriteItemRequest.builder()
-                        .requestItems(Map.of(entityTable, putRequestBatch))
+                        .requestItems(Map.of(entityTable.getName(), putRequestBatch))
                         .build();
 
                     return client.batchWriteItem(batchPutRequest)
@@ -562,7 +579,7 @@ public class DynamoDb extends DatabaseDriver {
         CompletableFuture<List<List<BackupItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
         AttributeValue orgId = AttributeValue.builder().s(organisationId).build();
         for (var table : entityTables) {
-            future = future.thenCombine(takeBackup(table, orgId), (a, b) -> {
+            future = future.thenCombine(takeBackup(table.getName(), orgId), (a, b) -> {
                 a.add(b);
                 return a;
             });
@@ -611,7 +628,7 @@ public class DynamoDb extends DatabaseDriver {
             Map<String, String> k = new HashMap<>();
             k.put("#table", targetTable);
 
-            return client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
+            return client.updateItem(request -> request.tableName(entityTable.getName()).key(targetKey).updateExpression("DELETE links.#table :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
         }).toArray(CompletableFuture[]::new);
         
         return CompletableFuture.allOf(futures);
@@ -633,7 +650,7 @@ public class DynamoDb extends DatabaseDriver {
             Map<String, String> k = new HashMap<>();
             k.put("#table", targetTable);
 
-            return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v))
+            return client.updateItem(request -> request.tableName(entityTable.getName()).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v))
                     .handle((r, e) -> {
                         if (e != null) {
                             if (e.getCause() instanceof ConditionalCheckFailedException) {
@@ -642,7 +659,7 @@ public class DynamoDb extends DatabaseDriver {
                                 v.put(":val", AttributeValue.builder().m(m).build());
                                 v.put(":revisionIncrement", REVISION_INCREMENT);
 
-                                return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val ADD revision :revisionIncrement").expressionAttributeValues(v));
+                                return client.updateItem(request -> request.tableName(entityTable.getName()).key(targetKey).conditionExpression("attribute_not_exists(links)").updateExpression("SET links = :val ADD revision :revisionIncrement").expressionAttributeValues(v));
                             } else {
                                 throw new RuntimeException(e);
                             }
@@ -652,7 +669,7 @@ public class DynamoDb extends DatabaseDriver {
                     .handle((r, e) -> { //nasty if attribute now exists use first approach again...
                         if (e != null) {
                             if (e.getCause() instanceof ConditionalCheckFailedException) {
-                                return client.updateItem(request -> request.tableName(entityTable).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
+                                return client.updateItem(request -> request.tableName(entityTable.getName()).key(targetKey).conditionExpression("attribute_exists(links)").updateExpression("ADD links.#table :val, revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
                             } else {
                                 throw new RuntimeException(e);
                             }
@@ -699,7 +716,7 @@ public class DynamoDb extends DatabaseDriver {
             extraConditions = "";
         }
 
-        var destination = client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)" + extraConditions).updateExpression("SET links.#table = :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW))
+        var destination = client.updateItem(request -> request.tableName(entityTable.getName()).key(key).conditionExpression("attribute_exists(links)" + extraConditions).updateExpression("SET links.#table = :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW))
                 .handle((r, e) -> {
                     if (e != null) {
                         if (e.getCause() instanceof ConditionalCheckFailedException) {
@@ -707,7 +724,7 @@ public class DynamoDb extends DatabaseDriver {
                             m.put(targetTable, values.get(":val"));
                             values.put(":val", AttributeValue.builder().m(m).build());
                             
-                            return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_not_exists(links)" + extraConditions).updateExpression("SET links = :val ADD revision :revisionIncrement").expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW));
+                            return client.updateItem(request -> request.tableName(entityTable.getName()).key(key).conditionExpression("attribute_not_exists(links)" + extraConditions).updateExpression("SET links = :val ADD revision :revisionIncrement").expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW));
                         } else {
                             throw new RuntimeException(e);
                         }
@@ -717,7 +734,7 @@ public class DynamoDb extends DatabaseDriver {
                 .handle((r, e) -> {
                     if (e != null) {
                         if (e.getCause() instanceof ConditionalCheckFailedException) {
-                            return client.updateItem(request -> request.tableName(entityTable).key(key).conditionExpression("attribute_exists(links)" + extraConditions).updateExpression("SET links.#table = :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW));
+                            return client.updateItem(request -> request.tableName(entityTable.getName()).key(key).conditionExpression("attribute_exists(links)" + extraConditions).updateExpression("SET links.#table = :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(values).returnValues(ReturnValue.UPDATED_NEW));
                         } else {
                             throw new RuntimeException(e);
                         }
@@ -842,7 +859,7 @@ public class DynamoDb extends DatabaseDriver {
         );
 
         return UpdateItemRequest.builder()
-            .tableName(entityTable)
+            .tableName(entityTable.getName())
             .key(entityItem)
             .attributeUpdates(linksAttributeMap)
             .build();
@@ -862,7 +879,7 @@ public class DynamoDb extends DatabaseDriver {
         sourceKey.put("organisationId", organisationIdAttribute);
         sourceKey.put("id", id);
         
-        var clearEntity = client.updateItem(request -> request.tableName(entityTable).key(sourceKey).updateExpression("SET links = :val ADD revision :revisionIncrement").returnValues(ReturnValue.UPDATED_NEW).applyMutation(mutator -> {
+        var clearEntity = client.updateItem(request -> request.tableName(entityTable.getName()).key(sourceKey).updateExpression("SET links = :val ADD revision :revisionIncrement").returnValues(ReturnValue.UPDATED_NEW).applyMutation(mutator -> {
             String sourceTable = getSourceTable(entity);
             //revision checks don't really work when reading from one env and writing to another.
             if (sourceTable != null && !sourceTable.equals(entityTable)) {
@@ -908,7 +925,7 @@ public class DynamoDb extends DatabaseDriver {
                 Map<String, String> k = new HashMap<>();
                 k.put("#table", source);
 
-                var destination = client.updateItem(request -> request.tableName(entityTable).key(targetKey).updateExpression("DELETE links.#table :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
+                var destination = client.updateItem(request -> request.tableName(entityTable.getName()).key(targetKey).updateExpression("DELETE links.#table :val ADD revision :revisionIncrement").expressionAttributeNames(k).expressionAttributeValues(v));
                 future = future.thenCombine(destination, (a, b) -> b);
             }
             getLinks(entity).clear();
@@ -927,7 +944,7 @@ public class DynamoDb extends DatabaseDriver {
                 .build();
 
         final var associatedOrganisationItems = QueryRequest.builder()
-                .tableName(entityTable)
+                .tableName(entityTable.getName())
                 .keyConditions(Map.of("organisationId", organisationCondition))
                 .build();
 
@@ -954,7 +971,7 @@ public class DynamoDb extends DatabaseDriver {
                             .stream()
                             .map(deleteRequestBatch -> {
                                 final var batchDeleteItemRequest = BatchWriteItemRequest.builder()
-                                        .requestItems(Map.of(entityTable, deleteRequestBatch))
+                                        .requestItems(Map.of(entityTable.getName(), deleteRequestBatch))
                                         .build();
 
                                 return client.batchWriteItem(batchDeleteItemRequest);
