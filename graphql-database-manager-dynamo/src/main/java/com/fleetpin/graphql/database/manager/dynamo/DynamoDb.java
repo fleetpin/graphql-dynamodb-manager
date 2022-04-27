@@ -251,7 +251,7 @@ public class DynamoDb extends DatabaseDriver {
 
             var flattener = new Flattener(false);
             entityTables.forEach(table -> {
-                flattener.add(table.getName(), responseItems.get(table));
+                flattener.add(table, responseItems.get(table.getName()));
             });
             var toReturn = new ArrayList<T>();
             for (var key : keys) {
@@ -324,7 +324,7 @@ public class DynamoDb extends DatabaseDriver {
         var toReturn = new ArrayList<T>();
         return client.queryPaginator(builder.build())
         .subscribe(response -> {
-            response.items().forEach(item -> toReturn.add(new DynamoItem(historyTable, item).convertTo(mapper, queryHistory.getType())));
+            response.items().forEach(item -> toReturn.add(new DynamoItem(historyTable, item, Optional.empty()).convertTo(mapper, queryHistory.getType())));
         }).thenApply(__ -> {
             return toReturn;
         });
@@ -441,7 +441,7 @@ public class DynamoDb extends DatabaseDriver {
 
         CompletableFuture<List<List<DynamoItem>>> future = CompletableFuture.completedFuture(new ArrayList<>());
         for (var table : entityTables) {
-            future = future.thenCombine(queryGlobal(table.getName(), id), (a, b) -> {
+            future = future.thenCombine(queryGlobal(table, id), (a, b) -> {
                 a.add(b);
                 return a;
             });
@@ -454,16 +454,16 @@ public class DynamoDb extends DatabaseDriver {
 
     }
 
-    private CompletableFuture<List<DynamoItem>> queryGlobal(String table, AttributeValue id) {
+    public CompletableFuture<List<DynamoItem>> queryGlobal(EntityTable table, AttributeValue id) {
         Map<String, AttributeValue> keyConditions = new HashMap<>();
         keyConditions.put(":secondaryGlobal", id);
 
         var toReturn = new ArrayList<DynamoItem>();
-        return client.queryPaginator(r -> r.tableName(table).indexName("secondaryGlobal")
+        return client.queryPaginator(r -> r.tableName(table.getName()).indexName("secondaryGlobal")
             .keyConditionExpression("secondaryGlobal = :secondaryGlobal")
             .expressionAttributeValues(keyConditions)
         ).subscribe(response -> {
-            response.items().forEach(item -> toReturn.add(new DynamoItem(table, item)));
+            response.items().forEach(item -> toReturn.add(new DynamoItem(table.getName(), item, table.getParallelIndex())));
         }).thenApply(__ -> {
             return toReturn;
         });

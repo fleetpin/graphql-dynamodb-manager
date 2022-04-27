@@ -28,5 +28,4 @@ import java.util.Optional;
 @ArgumentsSource(TestDatabaseProvider.class)
 public @interface TestDatabase {
     String organisationId() default "organisation";
-    String parallelIndex() default "parallelIndex";
 }

@@ -13,6 +13,7 @@
 package com.fleetpin.graphql.database.manager.dynamo;
 
 import java.util.Map;
+import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Table;
@@ -25,14 +26,16 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 public class DynamoItem implements Comparable<DynamoItem>{
 
 	private final String table;
+	private final Optional<String> parallelIndexId;
 	private final Map<String, AttributeValue> item;
 	private final String id;
 
 	private final HashMultimap<String, String> links;
 	private String organisationId;
 
-	DynamoItem(String table, Map<String, AttributeValue> item) {
+	DynamoItem(String table, Map<String, AttributeValue> item, Optional<String> parallelIndexId) {
 		this.table = table;
+		this.parallelIndexId = parallelIndexId;
 		this.item = item;
 
 		this.links = HashMultimap.create();
@@ -68,6 +71,14 @@ public class DynamoItem implements Comparable<DynamoItem>{
 			if(revision != null) {
 				t.setRevision(Long.parseLong(revision.n()));
 			}
+
+			if (parallelIndexId.isPresent()) {
+				var pIndex = item.get(parallelIndexId.get()).s();
+
+				if (pIndex != null) {
+					TableAccess.setTableParallelIndex(t, pIndex);
+				}
+			}
 			TableAccess.setTableSource(t, this.table, links, item.get("organisationId").s());
 		}
 		return table;
@@ -75,6 +86,10 @@ public class DynamoItem implements Comparable<DynamoItem>{
 	
 	public String getTable() {
 		return table;
+	}
+
+	public Optional<String> getParallelIndexId() {
+		return parallelIndexId;
 	}
 	
 	Map<String, AttributeValue> getItem() {
@@ -105,7 +120,5 @@ public class DynamoItem implements Comparable<DynamoItem>{
 	public String getOrganisationId() {
 		return organisationId;
 	}
-
-
 
 }

@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fleetpin.graphql.database.manager.EntityTable;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 
@@ -32,9 +33,9 @@ public final class Flattener {
 	}
 	
 	
-	public void add(String table, List<Map<String, AttributeValue>> list) {
+	public void add(EntityTable table, List<Map<String, AttributeValue>> list) {
 		list.forEach(item -> {
-			var i = new DynamoItem(table, item);
+			var i = new DynamoItem(table.getName(), item, table.getParallelIndex());
 			if(i.isDeleted()) {
 				lookup.remove(getId(i));
 			}else {
@@ -74,7 +75,7 @@ public final class Flattener {
 		if(item.get("item") == null) {
 			item.put("item", existing.getItem().get("item"));
 		}
-		var toReturn = new DynamoItem(replace.getTable(), item);
+		var toReturn = new DynamoItem(replace.getTable(), item, replace.getParallelIndexId());
 		toReturn.getLinks().putAll(existing.getLinks());
 
 		return toReturn;

@@ -12,6 +12,14 @@ public interface TableAccess {
         table.setSource(sourceTable, links, sourceOrganisationId);
     }
 
+    public static <T extends Table> String getTableParallelIndex(final T table) {
+        return table.getParallelIndex();
+    }
+
+    public static <T extends Table> void setTableParallelIndex(final T table, final String parallelIndex) {
+        table.setParallelIndex(parallelIndex);
+    }
+
     public static <T extends Table> String getTableSourceOrganisation(final T table) {
         return table.getSourceOrganisationId();
     }

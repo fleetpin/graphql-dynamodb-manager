@@ -16,6 +16,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.TableAccess;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.ParallelisableGrouping;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
@@ -97,20 +98,16 @@ final class DynamoDbIndexesTest {
 
 	@TestDatabase
 	void testParallelIndex(final  Database db) throws InterruptedException, ExecutionException {
-		var list = db.querySecondary(SimpleTable.class, "garry").get();
+		var list = db.queryGlobal(SimpleTable.class, "john").get();
 		Assertions.assertEquals(0, list.size());
 
-
 		SimpleTable entry1 = new SimpleTable("garry", "john");
-		entry1 = db.put(entry1).get();
-		Assertions.assertEquals("garry", entry1.getParallelIndex());
-		Assertions.assertNotNull(entry1.getId());
+		db.put(entry1).get();
+		
+		var result = db.queryGlobalUnique(SimpleTable.class, "john").get();
+		var parallelIndex = TableAccess.getTableParallelIndex(result);
 
-		list = db.querySecondary(SimpleTable.class, "garry").get();
-		Assertions.assertEquals(1, list.size());
-
-		Assertions.assertEquals("garry", list.get(0).getName());
-		Assertions.assertEquals("garry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getName());
+		Assertions.assertTrue(parallelIndex.contains(result.getGrouping()));
 	}
 
 	@TestDatabase
@@ -247,14 +244,13 @@ final class DynamoDbIndexesTest {
 			this.globalLookup = globalLookup;
 		}
 
+		@ParallelisableGrouping
+		public String getGrouping() { return name; }
 
 		@SecondaryIndex
 		public String getName() {
 			return name;
 		}
-
-		@ParallelisableGrouping
-		public String getParallelIndex() { return name; }
 
 		@GlobalIndex
 		public String getGlobalLookup() {

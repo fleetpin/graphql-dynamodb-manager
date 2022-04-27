@@ -57,7 +57,6 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 
         final var testMethod = extensionContext.getRequiredTestMethod();
         final var organisationId = testMethod.getAnnotation(TestDatabase.class).organisationId();
-        final var parallelIndex = testMethod.getAnnotation(TestDatabase.class).parallelIndex();
         
         final var withHistory = Arrays.stream(testMethod.getParameters())
                 .map(parameter -> parameter.getType().isAssignableFrom(HistoryProcessor.class))

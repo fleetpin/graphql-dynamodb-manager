@@ -6,6 +6,7 @@ import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -47,7 +48,7 @@ public class DynamoQuerySubscriber implements Subscriber<QueryResponse> {
                 stream = stream.takeWhile(__ -> togo.getAndDecrement() >= 0);
             }
 
-            stream.map(item -> new DynamoItem(this.table, item)).forEach(stuff::add);
+            stream.map(item -> new DynamoItem(this.table, item, Optional.empty())).forEach(stuff::add);
 
             if (togo == null || togo.get() > 0) {
                 this.s.request(1);

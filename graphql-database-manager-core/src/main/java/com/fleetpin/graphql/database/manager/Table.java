@@ -21,6 +21,8 @@ import com.fleetpin.graphql.builder.annotations.GraphQLIgnore;
 import com.fleetpin.graphql.builder.annotations.Id;
 import com.google.common.collect.HashMultimap;
 
+import javax.swing.text.html.Option;
+
 public abstract class Table {
 
 	private String id;
@@ -29,6 +31,7 @@ public abstract class Table {
 	private Instant updatedAt;
 	private String sourceTable;
 	private String sourceOrganistaionId;
+	private String parallelIndex;
 	private HashMultimap<String, String> links = HashMultimap.create();
 	
 	@Id
@@ -78,6 +81,14 @@ public abstract class Table {
 		}
 		return false;
 	}
+
+	void setParallelIndex(String parallelIndex) {
+		this.parallelIndex = parallelIndex;
+	}
+
+	@JsonIgnore
+	@GraphQLIgnore
+	String getParallelIndex() { return parallelIndex; }
 
 	@JsonIgnore
 	@GraphQLIgnore
