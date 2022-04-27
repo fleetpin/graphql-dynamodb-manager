@@ -18,5 +18,4 @@ public class EntityTable {
     public Optional<String> getParallelIndex() {
         return parallelIndex;
     }
-
 }

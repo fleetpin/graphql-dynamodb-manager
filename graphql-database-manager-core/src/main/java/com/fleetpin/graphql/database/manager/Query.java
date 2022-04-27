@@ -34,7 +34,7 @@ public class Query<T extends Table> {
 		return after;
 	}
 
-	public Optional<Integer> getParallelRequestCount() { return parallelRequests}
+	public Optional<Integer> getParallelRequestCount() { return parallelRequests; }
 
 
 	public Integer getLimit() {

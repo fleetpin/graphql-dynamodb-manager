@@ -42,8 +42,10 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import com.fasterxml.jackson.databind.node.TextNode;
+import com.fleetpin.graphql.database.manager.Parallelisable;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
+import com.fleetpin.graphql.database.manager.annotations.ParallelisableGrouping;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.google.common.collect.HashMultimap;
@@ -54,6 +56,23 @@ import software.amazon.awssdk.core.util.DefaultSdkAutoConstructMap;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class TableUtil {
+
+	static String getIndex(Table entity, Class annotation) {
+		for (var method : entity.getClass().getMethods()) {
+			if (method.isAnnotationPresent(annotation)) {
+				try {
+					var secondary = method.invoke(entity);
+					if (secondary instanceof Optional) {
+						secondary = ((Optional) secondary).orElse(null);
+					}
+					return (String) secondary;
+				} catch (ReflectiveOperationException e) {
+					throw new RuntimeException(e);
+				}
+			}
+		}
+		return null;
+	}
 
 	static String getSecondaryGlobal(Table entity) {
 		for (var method : entity.getClass().getMethods()) {

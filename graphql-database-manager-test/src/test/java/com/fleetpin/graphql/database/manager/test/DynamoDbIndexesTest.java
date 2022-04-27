@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
+import com.fleetpin.graphql.database.manager.annotations.ParallelisableGrouping;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoBackupItem;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
@@ -78,7 +79,6 @@ final class DynamoDbIndexesTest {
 
 	@TestDatabase
 	void testSecondary(final Database db) throws InterruptedException, ExecutionException {
-
 		var list = db.querySecondary(SimpleTable.class, "garry").get();
 		Assertions.assertEquals(0, list.size());
 
@@ -86,6 +86,24 @@ final class DynamoDbIndexesTest {
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
+		Assertions.assertNotNull(entry1.getId());
+
+		list = db.querySecondary(SimpleTable.class, "garry").get();
+		Assertions.assertEquals(1, list.size());
+
+		Assertions.assertEquals("garry", list.get(0).getName());
+		Assertions.assertEquals("garry", db.querySecondaryUnique(SimpleTable.class, "garry").get().getName());
+	}
+
+	@TestDatabase
+	void testParallelIndex(final  Database db) throws InterruptedException, ExecutionException {
+		var list = db.querySecondary(SimpleTable.class, "garry").get();
+		Assertions.assertEquals(0, list.size());
+
+
+		SimpleTable entry1 = new SimpleTable("garry", "john");
+		entry1 = db.put(entry1).get();
+		Assertions.assertEquals("garry", entry1.getParallelIndex());
 		Assertions.assertNotNull(entry1.getId());
 
 		list = db.querySecondary(SimpleTable.class, "garry").get();
@@ -234,6 +252,9 @@ final class DynamoDbIndexesTest {
 		public String getName() {
 			return name;
 		}
+
+		@ParallelisableGrouping
+		public String getParallelIndex() { return name; }
 
 		@GlobalIndex
 		public String getGlobalLookup() {

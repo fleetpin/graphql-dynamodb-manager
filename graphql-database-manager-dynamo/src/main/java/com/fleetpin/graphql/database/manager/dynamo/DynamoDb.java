@@ -15,16 +15,19 @@ package com.fleetpin.graphql.database.manager.dynamo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.annotations.ParallelisableGrouping;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
+import com.google.common.hash.Hashing;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -165,6 +168,8 @@ public class DynamoDb extends DatabaseDriver {
         String secondaryGlobal = TableUtil.getSecondaryGlobal(entity);
 
 
+        String secondaryParallelisationGrouping = TableUtil.getIndex(entity, ParallelisableGrouping.class);
+
         if (secondaryGlobal != null) {
             var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryGlobal).build();
             item.put("secondaryGlobal", index);
@@ -173,10 +178,12 @@ public class DynamoDb extends DatabaseDriver {
             var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryOrganisation).build();
             item.put("secondaryOrganisation", index);
         }
-//        if (parallel) {
-//            var hashthing = hashthinggg
-//            item.put(parallelQueryField, hashthing)
-//        }
+        if (entityTable.getParallelIndex().isPresent() && secondaryParallelisationGrouping != null) {
+            var hash = Hashing.crc32().hashString(entity.getId(), StandardCharsets.UTF_8).asInt();
+            var bytes = new StringBuilder(Integer.toBinaryString(hash)).toString();
+            var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryParallelisationGrouping + ":" + bytes).build();
+            item.put(entityTable.getParallelIndex().get(), index);
+        }
         return client.putItem(request -> request.tableName(entityTable.getName()).item(item).applyMutation(mutator -> {
             if (check) {
                 String sourceOrganisationId = getSourceOrganisationId(entity);
