@@ -74,11 +74,11 @@ public final class DynamoDbManager extends DatabaseManager {
 			return this;
 		}
 
-
-		public DyanmoDbManagerBuilder tables(List<String> tables) {
-			this.tables = tables.stream().map(t -> new EntityTable(t, Optional.empty())).collect(Collectors.toList());
+		public DyanmoDbManagerBuilder tables(List<EntityTable> tables) {
+			this.tables = tables;
 			return this;
 		}
+
 		
 		public DyanmoDbManagerBuilder tables(String... tables) {
 			this.tables = Arrays.stream(tables).map(t -> new EntityTable(t, Optional.empty())).collect(Collectors.toList());

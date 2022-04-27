@@ -21,6 +21,7 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClientBuilder;
 import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 import com.fleetpin.graphql.database.manager.Database;
+import com.fleetpin.graphql.database.manager.EntityTable;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -33,6 +34,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -163,7 +165,7 @@ final class DynamoDbInitializer {
         return database;
     }
 
-    static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final String[] tables, String historyTable) {
+    static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final List<EntityTable> tables, String historyTable) {
         return DynamoDbManager.builder()
                 .tables(tables)
                 .dynamoDbAsyncClient(client)

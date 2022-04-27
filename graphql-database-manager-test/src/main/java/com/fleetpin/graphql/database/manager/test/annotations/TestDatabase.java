@@ -20,6 +20,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.Optional;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
@@ -27,4 +28,5 @@ import java.lang.annotation.Target;
 @ArgumentsSource(TestDatabaseProvider.class)
 public @interface TestDatabase {
     String organisationId() default "organisation";
+    String parallelIndex() default "parallelIndex";
 }

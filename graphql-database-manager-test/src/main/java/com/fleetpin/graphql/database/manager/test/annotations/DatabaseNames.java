@@ -21,4 +21,5 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface DatabaseNames {
     String[] value();
+    String parallelKey() default "parallelIndex";
 }
