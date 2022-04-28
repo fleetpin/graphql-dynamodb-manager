@@ -1,5 +1,6 @@
 package com.fleetpin.graphql.database.manager.dynamo;
 
+import com.fleetpin.graphql.database.manager.EntityTable;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
@@ -15,13 +16,13 @@ public class DynamoQuerySubscriber implements Subscriber<QueryResponse> {
     private final  AtomicInteger togo;
     private Subscription s;
     private final CompletableFuture<List<DynamoItem>> future = new CompletableFuture<List<DynamoItem>>();
-    private final String table;
+    private final EntityTable table;
 
-    protected DynamoQuerySubscriber(String table) {
+    protected DynamoQuerySubscriber(EntityTable table) {
         this(table, null);
     }
 
-    protected DynamoQuerySubscriber(String table, Integer limit) {
+    protected DynamoQuerySubscriber(EntityTable table, Integer limit) {
         this.table = table;
 
         if (limit != null) {
@@ -48,7 +49,7 @@ public class DynamoQuerySubscriber implements Subscriber<QueryResponse> {
                 stream = stream.takeWhile(__ -> togo.getAndDecrement() >= 0);
             }
 
-            stream.map(item -> new DynamoItem(this.table, item, Optional.empty())).forEach(stuff::add);
+            stream.map(item -> new DynamoItem(this.table.getName(), item, this.table.getParallelIndex())).forEach(stuff::add);
 
             if (togo == null || togo.get() > 0) {
                 this.s.request(1);

@@ -510,7 +510,7 @@ public class DynamoDb extends DatabaseDriver {
         keyConditions.put(":organisationId", organisationId);
         keyConditions.put(":table", id);
 
-        var s = new DynamoQuerySubscriber(table.getName(), query.getLimit());
+        var s = new DynamoQuerySubscriber(table, query.getLimit());
 
 
         var parrallelRequestCount = query.getParallelRequestCount();
@@ -530,13 +530,17 @@ public class DynamoDb extends DatabaseDriver {
             k.put("#parallelIndex", table.getParallelIndex().get());
 
             var result = parallelIndicies.stream().map(index -> {
+                var parallelS = new DynamoQuerySubscriber(table, query.getLimit());
+                Map<String, AttributeValue> paralleKc = new HashMap<>();
+                paralleKc.put(":organisationId", organisationId);
+                paralleKc.put(":table", id);
+                paralleKc.put(":parallelIndex", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build());
                 client.queryPaginator(r -> {
-                    keyConditions.put(":parallelIndex", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build());
                     r.tableName(table.getName())
                             .consistentRead(true)
                             .keyConditionExpression("organisationId = :organisationId AND begins_with(#parallelIndex, :parallelIndex)")
                             .filterExpression("begins_with(id, :table)")
-                            .expressionAttributeValues(keyConditions)
+                            .expressionAttributeValues(paralleKc)
                             .expressionAttributeNames(k)
                             .indexName(table.getParallelIndex().get())
                             .applyMutation(b -> {
@@ -551,8 +555,8 @@ public class DynamoDb extends DatabaseDriver {
                                             table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build()));
                                 }
                             });
-                }).subscribe(s);
-                return s.getFuture();
+                }).subscribe(parallelS);
+                return parallelS.getFuture();
             });
 
             return CompletableFutureUtil.sequence(result).thenApply(parts -> parts.stream().flatMap(p -> p.stream()).collect(Collectors.toList()));
