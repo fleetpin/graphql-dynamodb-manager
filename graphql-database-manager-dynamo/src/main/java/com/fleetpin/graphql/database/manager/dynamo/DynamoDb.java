@@ -559,7 +559,9 @@ public class DynamoDb extends DatabaseDriver {
                 return parallelS.getFuture();
             });
 
-            return CompletableFutureUtil.sequence(result).thenApply(parts -> parts.stream().flatMap(p -> p.stream()).collect(Collectors.toList()));
+            return CompletableFutureUtil.sequence(result).thenApply(parts -> parts.stream().flatMap(p -> {
+                return p.stream();
+            }).collect(Collectors.toList()));
         }
 
 
