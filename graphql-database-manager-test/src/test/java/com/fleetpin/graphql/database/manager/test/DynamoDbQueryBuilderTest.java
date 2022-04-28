@@ -14,6 +14,7 @@ package com.fleetpin.graphql.database.manager.test;
 
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.annotations.ParallelisableGrouping;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import org.junit.jupiter.api.Assertions;
 
@@ -67,9 +68,12 @@ final class DynamoDbQueryBuilderTest {
 		Assertions.assertEquals(10, result2.size());
 	}
 
-	static class BigData extends Table {
+	public static class BigData extends Table {
 		private String name;
 		private Double[][] matrix;
+
+		@ParallelisableGrouping
+		public String getGrouping() { return "grouping"; }
 
 		public BigData(String id, String name, Double[][] matrix) {
 			setId(id);
@@ -106,6 +110,29 @@ final class DynamoDbQueryBuilderTest {
 		} catch (InterruptedException | ExecutionException e) {
 			throw new RuntimeException();
 		}
+	}
+
+	@TestDatabase
+	void parallelRequest(final Database db) throws InterruptedException, ExecutionException {
+		var n = 10;
+		List<String> ids = Stream.iterate(1, i -> i + 1)
+				.map(i -> getId(i))
+				.limit(n)
+				.collect(Collectors.toList());
+
+		var l = Stream.iterate(1, i -> i + 1)
+				.limit(n)
+				// Must pick a sufficiently sized matrix in order to force multiple pages to test limit, 100 works well
+				.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
+				.collect(Collectors.toList());
+
+		l.stream().map(db::put).forEach(this::swallow);
+
+		var result = db.query(BigData.class, builder -> builder.parallel(2, "grouping")).get();
+
+		Assertions.assertEquals(100, result.size());
+		Assertions.assertEquals("bigdata-457", result.get(0).name);
+		Assertions.assertEquals("bigdata-556", result.get(result.size() - 1).name);
 	}
 
 	// This test tests querying against large pieces of data which force Dynamoclient to return multiple pages.

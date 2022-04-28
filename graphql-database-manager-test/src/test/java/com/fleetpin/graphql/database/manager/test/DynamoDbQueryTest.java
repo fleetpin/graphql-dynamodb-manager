@@ -14,10 +14,13 @@ package com.fleetpin.graphql.database.manager.test;
 
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.TableAccess;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
+import com.google.common.hash.Hashing;
 import org.junit.jupiter.api.Assertions;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 

@@ -9,7 +9,8 @@ public class QueryBuilder<V extends Table> {
 	private String startsWith;
 	private String after;
 	private Integer limit;
-	private Optional<Integer> parallelRequests;
+	private Integer parallelRequests;
+	private String parallelGrouping;
 	
     private QueryBuilder(Class<V> type) {
     	this.type = type;
@@ -30,8 +31,9 @@ public class QueryBuilder<V extends Table> {
     	return this;
     }
 
-    public QueryBuilder<V> parallel(Integer parallelRequests) {
-        this.parallelRequests = Optional.of(parallelRequests);
+    public QueryBuilder<V> parallel(Integer parallelRequests, String parallelGrouping) {
+        this.parallelRequests = parallelRequests;
+        this.parallelGrouping = parallelGrouping;
         return this;
     }
 
@@ -42,7 +44,7 @@ public class QueryBuilder<V extends Table> {
     }
 
     public Query<V> build() {
-    	return new Query<V>(type, startsWith, after, limit, parallelRequests);
+    	return new Query<V>(type, startsWith, after, limit, parallelRequests, parallelGrouping);
     }
     
     public static <V extends Table> QueryBuilder<V> create(Class<V> type) {

@@ -60,21 +60,33 @@ final class DynamoDbInitializer {
                         .attributeName("secondaryGlobal")
                         .keyType(KeyType.HASH)
                         .build()))
-                        .localSecondaryIndexes(builder -> builder.indexName("secondaryOrganisation").projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(KeySchemaElement.builder()
+                .localSecondaryIndexes(builder -> builder.indexName("secondaryOrganisation").projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(KeySchemaElement.builder()
+                        .attributeName("organisationId")
+                        .keyType(KeyType.HASH)
+                        .build(),
+                        KeySchemaElement.builder()
+                            .attributeName("secondaryOrganisation")
+                            .keyType(KeyType.RANGE)
+                            .build()
+                        ),
+                        builder -> builder.indexName("parallelIndex").projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(KeySchemaElement.builder()
                                         .attributeName("organisationId")
                                         .keyType(KeyType.HASH)
                                         .build(),
                                 KeySchemaElement.builder()
-                                        .attributeName("secondaryOrganisation")
+                                        .attributeName("parallelIndex")
                                         .keyType(KeyType.RANGE)
-                                        .build()))
-                        .attributeDefinitions(
-                                AttributeDefinition.builder().attributeName("organisationId").attributeType(ScalarAttributeType.S).build(),
-                                AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
-                                AttributeDefinition.builder().attributeName("secondaryGlobal").attributeType(ScalarAttributeType.S).build(),
-                                AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build()
-                        ).provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
-        ).get();        
+                                        .build()
+                        )
+                )
+                .attributeDefinitions(
+                        AttributeDefinition.builder().attributeName("organisationId").attributeType(ScalarAttributeType.S).build(),
+                        AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
+                        AttributeDefinition.builder().attributeName("secondaryGlobal").attributeType(ScalarAttributeType.S).build(),
+                        AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build(),
+                        AttributeDefinition.builder().attributeName("parallelIndex").attributeType(ScalarAttributeType.S).build()
+                ).provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
+        ).get();
     }
     
     static void createHistoryTable(final DynamoDbAsyncClient client, final String name) throws ExecutionException, InterruptedException {

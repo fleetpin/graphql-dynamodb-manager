@@ -23,16 +23,19 @@ import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.hash.Hashing;
+import com.google.common.math.IntMath;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 
+import javax.swing.text.html.Option;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
@@ -278,21 +281,13 @@ public class DynamoDb extends DatabaseDriver {
 
     @Override
     public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key) {
-        var parrallelRequestCount = key.getQuery().getParallelRequestCount();
-
-        if (parrallelRequestCount.isPresent()) {
-
-        }
-
-
-
         var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
         String prefix = Optional.ofNullable(key.getQuery().getStartsWith()).orElse("");
         var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
 
         var futures = entityTables.stream()
             .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
-            .map(pair -> query(pair.getKey().getName(), pair.getValue(), id, key.getQuery()));
+            .map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
 
         var future = CompletableFutureUtil.sequence(futures);
 
@@ -509,16 +504,63 @@ public class DynamoDb extends DatabaseDriver {
         });
     }
 
-    private CompletableFuture<List<DynamoItem>> query(String table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
+    private CompletableFuture<List<DynamoItem>> query(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
 
         Map<String, AttributeValue> keyConditions = new HashMap<>();
         keyConditions.put(":organisationId", organisationId);
         keyConditions.put(":table", id);
 
-        var s = new DynamoQuerySubscriber(table, query.getLimit());
+        var s = new DynamoQuerySubscriber(table.getName(), query.getLimit());
+
+
+        var parrallelRequestCount = query.getParallelRequestCount();
+        ArrayList<String> parallelIndicies = new ArrayList<>();
+        if (parrallelRequestCount != null) {
+            var parallelisationCount = IntMath.ceilingPowerOfTwo(Math.min(parrallelRequestCount, maxParallelisation()));
+            IntStream.range(0, parallelisationCount).forEach(i -> {
+                var format = "%" + Math.round(Math.log(parallelisationCount / Math.log(2))) + "s";
+                parallelIndicies.add(String.format(format, Integer.toBinaryString(i)).replace(' ', '0'));
+            });
+        }
+
+
+        if (parallelIndicies.size() > 0 && table.getParallelIndex().isPresent()) {
+
+            Map<String, String> k = new HashMap<>();
+            k.put("#parallelIndex", table.getParallelIndex().get());
+
+            var result = parallelIndicies.stream().map(index -> {
+                client.queryPaginator(r -> {
+                    keyConditions.put(":parallelIndex", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build());
+                    r.tableName(table.getName())
+                            .consistentRead(true)
+                            .keyConditionExpression("organisationId = :organisationId AND begins_with(#parallelIndex, :parallelIndex)")
+                            .filterExpression("begins_with(id, :table)")
+                            .expressionAttributeValues(keyConditions)
+                            .expressionAttributeNames(k)
+                            .indexName(table.getParallelIndex().get())
+                            .applyMutation(b -> {
+                                if (query.getLimit() != null) {
+                                    b.limit(query.getLimit());
+                                }
+
+                                if (query.getAfter() != null) {
+                                    b.exclusiveStartKey(Map.of(
+                                            "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
+                                            "organisationId", organisationId,
+                                            table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build()));
+                                }
+                            });
+                }).subscribe(s);
+                return s.getFuture();
+            });
+
+            return CompletableFutureUtil.sequence(result).thenApply(parts -> parts.stream().flatMap(p -> p.stream()).collect(Collectors.toList()));
+        }
+
 
         client.queryPaginator(r -> {
-            r.tableName(table)
+            r.tableName(table.getName())
                 .consistentRead(true)
                 .keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
                 .expressionAttributeValues(keyConditions)

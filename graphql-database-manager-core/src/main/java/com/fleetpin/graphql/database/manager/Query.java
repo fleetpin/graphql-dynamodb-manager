@@ -9,9 +9,10 @@ public class Query<T extends Table> {
 	private final String startsWith;
 	private final String after;
 	private final Integer limit;
-	private final Optional<Integer> parallelRequests;
+	private final String parallelGrouping;
+	private final Integer parallelRequests;
 
-	Query(Class<T> type, String startsWith, String after, Integer limit, Optional<Integer> parallelRequests) {
+	Query(Class<T> type, String startsWith, String after, Integer limit, Integer parallelRequests, String parallelGrouping) {
 		if (type == null) {
 			throw new RuntimeException("type can not be null, did you forget to call .on(Table::class)?");
 		}
@@ -20,6 +21,7 @@ public class Query<T extends Table> {
 		this.after = after;
 		this.limit = limit;
 		this.parallelRequests = parallelRequests;
+		this.parallelGrouping = parallelGrouping;
 	}
 
 	public Class<T> getType() {
@@ -34,8 +36,9 @@ public class Query<T extends Table> {
 		return after;
 	}
 
-	public Optional<Integer> getParallelRequestCount() { return parallelRequests; }
+	public Integer getParallelRequestCount() { return parallelRequests; }
 
+	public String getParallelGrouping() { return parallelGrouping; }
 
 	public Integer getLimit() {
 		return limit;

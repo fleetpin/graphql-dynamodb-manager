@@ -26,14 +26,18 @@ import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
+import com.google.common.hash.Hashing;
 import org.junit.jupiter.api.Assertions;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+
+import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 final class DynamoDbIndexesTest {
 
@@ -97,17 +101,20 @@ final class DynamoDbIndexesTest {
 	}
 
 	@TestDatabase
-	void testParallelIndex(final  Database db) throws InterruptedException, ExecutionException {
+	void testParallelIndexMakesLogicalSense(final  Database db) throws InterruptedException, ExecutionException {
 		var list = db.queryGlobal(SimpleTable.class, "john").get();
 		Assertions.assertEquals(0, list.size());
 
 		SimpleTable entry1 = new SimpleTable("garry", "john");
 		db.put(entry1).get();
-		
+
 		var result = db.queryGlobalUnique(SimpleTable.class, "john").get();
 		var parallelIndex = TableAccess.getTableParallelIndex(result);
 
-		Assertions.assertTrue(parallelIndex.contains(result.getGrouping()));
+		var hash = Hashing.crc32().hashString(result.getId(), StandardCharsets.UTF_8).asInt();
+		var bytes = new StringBuilder(Integer.toBinaryString(hash)).toString();
+
+		Assertions.assertEquals("simpletables:" + entry1.getGrouping() + ":" + bytes, parallelIndex);
 	}
 
 	@TestDatabase
