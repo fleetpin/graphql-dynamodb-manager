@@ -513,11 +513,19 @@ public class DynamoDb extends DatabaseDriver {
         var s = new DynamoQuerySubscriber(table, query.getLimit());
 
 
+        String partitionStart = null;
+        if (query.getAfterPartition() != null) {
+            partitionStart = String.format("%32s", Integer.toBinaryString(query.getAfterPartition())).replace(' ', '0');
+        }
+
+
         var parrallelRequestCount = query.getParallelRequestCount();
         ArrayList<String> parallelIndicies = new ArrayList<>();
         if (parrallelRequestCount != null) {
             var parallelisationCount = IntMath.ceilingPowerOfTwo(Math.min(parrallelRequestCount, maxParallelisation()));
-            IntStream.range(0, parallelisationCount).forEach(i -> {
+            var start = partitionStart != null ? Integer.parseInt(partitionStart.substring(0, parallelisationCount - 1), 2): 0;
+
+            IntStream.range(start, parallelisationCount).forEach(i -> {
                 var format = "%" + Math.round(Math.log(parallelisationCount / Math.log(2))) + "s";
                 parallelIndicies.add(String.format(format, Integer.toBinaryString(i)).replace(' ', '0'));
             });
@@ -529,6 +537,7 @@ public class DynamoDb extends DatabaseDriver {
             Map<String, String> k = new HashMap<>();
             k.put("#parallelIndex", table.getParallelIndex().get());
 
+            String finalPartitionStart = partitionStart;
             var result = parallelIndicies.stream().map(index -> {
                 var parallelS = new DynamoQuerySubscriber(table, query.getLimit());
                 Map<String, AttributeValue> paralleKc = new HashMap<>();
@@ -548,11 +557,13 @@ public class DynamoDb extends DatabaseDriver {
                                     b.limit(query.getLimit());
                                 }
 
-                                if (query.getAfter() != null) {
+                                var part = Integer.parseInt(index,2);
+
+                                if (finalPartitionStart != null && query.getAfterPartition() == part) {
                                     b.exclusiveStartKey(Map.of(
                                             "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
                                             "organisationId", organisationId,
-                                            table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build()));
+                                            table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + finalPartitionStart).build()));
                                 }
                             });
                 }).subscribe(parallelS);

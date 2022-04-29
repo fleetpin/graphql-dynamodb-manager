@@ -1,6 +1,5 @@
 package com.fleetpin.graphql.database.manager;
 
-import java.util.Optional;
 import java.util.function.Consumer;
 
 public class QueryBuilder<V extends Table> {
@@ -9,6 +8,8 @@ public class QueryBuilder<V extends Table> {
 	private String startsWith;
 	private String after;
 	private Integer limit;
+
+    private Integer afterPartition;
 	private Integer parallelRequests;
 	private String parallelGrouping;
 	
@@ -31,6 +32,12 @@ public class QueryBuilder<V extends Table> {
     	return this;
     }
 
+    public QueryBuilder<V> after(String from, Integer afterPartition) {
+        this.after = from;
+        this.afterPartition = afterPartition;
+        return this;
+    }
+
     public QueryBuilder<V> parallel(Integer parallelRequests, String parallelGrouping) {
         this.parallelRequests = parallelRequests;
         this.parallelGrouping = parallelGrouping;
@@ -44,7 +51,7 @@ public class QueryBuilder<V extends Table> {
     }
 
     public Query<V> build() {
-    	return new Query<V>(type, startsWith, after, limit, parallelRequests, parallelGrouping);
+    	return new Query<V>(type, startsWith, after, limit, afterPartition, parallelRequests, parallelGrouping);
     }
     
     public static <V extends Table> QueryBuilder<V> create(Class<V> type) {
