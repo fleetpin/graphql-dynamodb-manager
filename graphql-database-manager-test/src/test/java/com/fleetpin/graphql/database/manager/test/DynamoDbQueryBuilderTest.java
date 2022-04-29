@@ -113,7 +113,7 @@ final class DynamoDbQueryBuilderTest {
 	}
 
 	@TestDatabase
-	void parallelRequest2(final Database db) throws InterruptedException, ExecutionException {
+	void parallelRequestPagination(final Database db) throws InterruptedException, ExecutionException {
 		var n = 100;
 		List<String> ids = Stream.iterate(1, i -> i + 1)
 				.map(i -> getId(i))
@@ -128,11 +128,11 @@ final class DynamoDbQueryBuilderTest {
 
 		l.stream().map(db::put).forEach(this::swallow);
 
-		var result = db.query(BigData.class, builder -> builder.parallel(8, "grouping").after(getId(2), 2073883876)).get();
+		var result = db.query(BigData.class, builder -> builder.parallel(8, "grouping").after(getId(1), 2096181501)).get();
 
-		Assertions.assertEquals(18, result.size());
-		Assertions.assertEquals("bigdata-457", result.get(0).name);
-		Assertions.assertEquals("bigdata-556", result.get(result.size() - 1).name);
+		Assertions.assertEquals(5, result.size());
+		Assertions.assertEquals("bigdata-12", result.get(0).name);
+		Assertions.assertEquals("bigdata-58", result.get(result.size() - 1).name);
 	}
 
 	@TestDatabase
