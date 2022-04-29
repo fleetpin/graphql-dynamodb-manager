@@ -504,15 +504,7 @@ public class DynamoDb extends DatabaseDriver {
         });
     }
 
-    private CompletableFuture<List<DynamoItem>> query(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
-
-        Map<String, AttributeValue> keyConditions = new HashMap<>();
-        keyConditions.put(":organisationId", organisationId);
-        keyConditions.put(":table", id);
-
-        var s = new DynamoQuerySubscriber(table, query.getLimit());
-
-
+    private CompletableFuture<List<DynamoItem>> queryParallel(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
         String partitionStart = null;
         Integer partitionStartDec = null;
         if (query.getAfterPartition() != null) {
@@ -535,50 +527,56 @@ public class DynamoDb extends DatabaseDriver {
             });
         }
 
+        Map<String, String> k = new HashMap<>();
+        k.put("#parallelIndex", table.getParallelIndex().get());
 
-        if (parallelIndicies.size() > 0 && table.getParallelIndex().isPresent()) {
+        Integer finalPartitionStart = partitionStartDec;
+        String finalPartitionStartIndex = partitionStart;
+        var result = parallelIndicies.stream().map(index -> {
+            var parallelS = new DynamoQuerySubscriber(table, query.getLimit());
+            Map<String, AttributeValue> paralleKc = new HashMap<>();
+            paralleKc.put(":organisationId", organisationId);
+            paralleKc.put(":table", id);
+            paralleKc.put(":parallelIndex", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build());
+            client.queryPaginator(r -> {
+                r.tableName(table.getName())
+                        .consistentRead(true)
+                        .keyConditionExpression("organisationId = :organisationId AND begins_with(#parallelIndex, :parallelIndex)")
+                        .filterExpression("begins_with(id, :table)")
+                        .expressionAttributeValues(paralleKc)
+                        .expressionAttributeNames(k)
+                        .indexName(table.getParallelIndex().get())
+                        .applyMutation(b -> {
+                            if (query.getLimit() != null) {
+                                b.limit(query.getLimit());
+                            }
 
-            Map<String, String> k = new HashMap<>();
-            k.put("#parallelIndex", table.getParallelIndex().get());
+                            var part = Integer.parseInt(index,2);
 
-            Integer finalPartitionStart = partitionStartDec;
-            String finalPartitionStart1 = partitionStart;
-            var result = parallelIndicies.stream().map(index -> {
-                var parallelS = new DynamoQuerySubscriber(table, query.getLimit());
-                Map<String, AttributeValue> paralleKc = new HashMap<>();
-                paralleKc.put(":organisationId", organisationId);
-                paralleKc.put(":table", id);
-                paralleKc.put(":parallelIndex", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + index).build());
-                client.queryPaginator(r -> {
-                    r.tableName(table.getName())
-                            .consistentRead(true)
-                            .keyConditionExpression("organisationId = :organisationId AND begins_with(#parallelIndex, :parallelIndex)")
-                            .filterExpression("begins_with(id, :table)")
-                            .expressionAttributeValues(paralleKc)
-                            .expressionAttributeNames(k)
-                            .indexName(table.getParallelIndex().get())
-                            .applyMutation(b -> {
-                                if (query.getLimit() != null) {
-                                    b.limit(query.getLimit());
-                                }
+                            if (finalPartitionStart != null && finalPartitionStartIndex != null && finalPartitionStart != null && finalPartitionStart == part) {
+                                b.exclusiveStartKey(Map.of(
+                                        "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
+                                        "organisationId", organisationId,
+                                        table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + finalPartitionStartIndex).build()));
+                            }
+                        });
+            }).subscribe(parallelS);
+            return parallelS.getFuture();
+        });
 
-                                var part = Integer.parseInt(index,2);
+        return CompletableFutureUtil.sequence(result).thenApply(parts -> parts.stream().flatMap(p -> p.stream()).collect(Collectors.toList()));
+    }
 
-                                if (finalPartitionStart != null && finalPartitionStart != null && finalPartitionStart == part) {
-                                    b.exclusiveStartKey(Map.of(
-                                            "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
-                                            "organisationId", organisationId,
-                                            table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + finalPartitionStart1).build()));
-                                }
-                            });
-                }).subscribe(parallelS);
-                return parallelS.getFuture();
-            });
-
-            return CompletableFutureUtil.sequence(result).thenApply(parts -> parts.stream().flatMap(p -> {
-                return p.stream();
-            }).collect(Collectors.toList()));
+    private CompletableFuture<List<DynamoItem>> query(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
+        if (query.getParallelRequestCount() > 0 && table.getParallelIndex().isPresent()) {
+            return queryParallel(table, organisationId, id, query);
         }
+
+        Map<String, AttributeValue> keyConditions = new HashMap<>();
+        keyConditions.put(":organisationId", organisationId);
+        keyConditions.put(":table", id);
+
+        var s = new DynamoQuerySubscriber(table, query.getLimit());
 
 
         client.queryPaginator(r -> {

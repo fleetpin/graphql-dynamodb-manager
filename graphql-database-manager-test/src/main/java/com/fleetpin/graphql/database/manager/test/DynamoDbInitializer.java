@@ -40,10 +40,13 @@ import java.util.concurrent.ExecutionException;
 
 final class DynamoDbInitializer {
     @SuppressWarnings("unchecked")
-    static void createTable(final DynamoDbAsyncClient client, final String name) throws ExecutionException, InterruptedException {
+    static void createTable(final DynamoDbAsyncClient client, final String name, final String parallelIndexId) throws ExecutionException, InterruptedException {
         if (client.listTables().get().tableNames().contains(name)) {
             return;
         }
+
+
+        var finalParallelIndexId = parallelIndexId != null ? parallelIndexId : "parallelIndex";
 
         client.createTable(t -> t.tableName(name).keySchema(
                 KeySchemaElement.builder()
@@ -69,12 +72,12 @@ final class DynamoDbInitializer {
                             .keyType(KeyType.RANGE)
                             .build()
                         ),
-                        builder -> builder.indexName("parallelIndex").projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(KeySchemaElement.builder()
+                        builder -> builder.indexName(finalParallelIndexId).projection(b -> b.projectionType(ProjectionType.ALL)).keySchema(KeySchemaElement.builder()
                                         .attributeName("organisationId")
                                         .keyType(KeyType.HASH)
                                         .build(),
                                 KeySchemaElement.builder()
-                                        .attributeName("parallelIndex")
+                                        .attributeName(finalParallelIndexId)
                                         .keyType(KeyType.RANGE)
                                         .build()
                         )
@@ -84,7 +87,7 @@ final class DynamoDbInitializer {
                         AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
                         AttributeDefinition.builder().attributeName("secondaryGlobal").attributeType(ScalarAttributeType.S).build(),
                         AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build(),
-                        AttributeDefinition.builder().attributeName("parallelIndex").attributeType(ScalarAttributeType.S).build()
+                        AttributeDefinition.builder().attributeName(finalParallelIndexId).attributeType(ScalarAttributeType.S).build()
                 ).provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
         ).get();
     }

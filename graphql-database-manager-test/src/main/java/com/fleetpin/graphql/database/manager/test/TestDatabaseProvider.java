@@ -119,7 +119,7 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 
         String historyTable = null;
         for (final String table : tables) {
-            createTable(client, table);
+            createTable(client, table, parallelIndex);
             var streamArn = client.describeTable(builder -> builder.tableName(table).build()).get().table().latestStreamArn();
             var tName  = streamClient.describeStream(builder -> builder.streamArn(streamArn).build()).get().streamDescription().tableName();
             //System.out.println("find me: " + tName);
