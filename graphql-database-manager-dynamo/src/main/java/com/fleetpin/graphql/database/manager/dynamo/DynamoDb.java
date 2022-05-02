@@ -504,24 +504,18 @@ public class DynamoDb extends DatabaseDriver {
         });
     }
 
+
     private CompletableFuture<List<DynamoItem>> queryParallel(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
-        String partitionStart = null;
-        Integer partitionStartDec = null;
-        if (query.getAfterPartition() != null) {
-            partitionStart = String.format("%1$-32s", Integer.toBinaryString(query.getAfterPartition())).replace(' ', '0');
-        }
-
-
+        var getAfter = query.getAfterParallel();
         var parrallelRequestCount = query.getParallelRequestCount();
-        ArrayList<String> parallelIndicies = new ArrayList<>();
-        if (parrallelRequestCount != null) {
+        ArrayList<String> parallelIndicies = getAfter != null ? new ArrayList(getAfter.keySet()) : new ArrayList();
+
+
+        if (getAfter == null) {
             var parallelisationCount = IntMath.ceilingPowerOfTwo(Math.min(parrallelRequestCount, maxParallelisation()));
             var numberOfBits = Math.round(Math.log(parallelisationCount) / Math.log(2));
 
-
-            partitionStartDec = partitionStart != null ? Integer.parseInt(partitionStart.substring(0, (int) numberOfBits), 2): 0;
-
-            IntStream.range(partitionStartDec, parallelisationCount).forEach(i -> {
+            IntStream.range(0, parallelisationCount).forEach(i -> {
                 var format = "%1$-" + numberOfBits + "s";
                 parallelIndicies.add(String.format(format, Integer.toBinaryString(i)).replace(' ', '0'));
             });
@@ -530,8 +524,6 @@ public class DynamoDb extends DatabaseDriver {
         Map<String, String> k = new HashMap<>();
         k.put("#parallelIndex", table.getParallelIndex().get());
 
-        Integer finalPartitionStart = partitionStartDec;
-        String finalPartitionStartIndex = partitionStart;
         var result = parallelIndicies.stream().map(index -> {
             var parallelS = new DynamoQuerySubscriber(table, query.getLimit());
             Map<String, AttributeValue> paralleKc = new HashMap<>();
@@ -551,13 +543,14 @@ public class DynamoDb extends DatabaseDriver {
                                 b.limit(query.getLimit());
                             }
 
-                            var part = Integer.parseInt(index,2);
-
-                            if (finalPartitionStart != null && finalPartitionStartIndex != null && finalPartitionStart != null && finalPartitionStart == part) {
-                                b.exclusiveStartKey(Map.of(
-                                        "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
-                                        "organisationId", organisationId,
-                                        table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + finalPartitionStartIndex).build()));
+                            if (getAfter != null) {
+                                var getAfterForPartition = getAfter.get(index);
+                                if (getAfterForPartition != null) {
+                                    b.exclusiveStartKey(Map.of(
+                                            "id", AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + getAfterForPartition.getIndex()).build(),
+                                            "organisationId", organisationId,
+                                            table.getParallelIndex().get(), AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getParallelGrouping() + ":" + getAfterForPartition.getParallelIndex()).build()));
+                                }
                             }
                         });
             }).subscribe(parallelS);
@@ -568,7 +561,11 @@ public class DynamoDb extends DatabaseDriver {
     }
 
     private CompletableFuture<List<DynamoItem>> query(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
-        if (query.getParallelRequestCount() > 0 && table.getParallelIndex().isPresent()) {
+        if (query.getParallelRequestCount() != null &&
+            query.getParallelGrouping() != null &&
+            query.getParallelRequestCount() > 0 &&
+            table.getParallelIndex().isPresent()
+        ) {
             return queryParallel(table, organisationId, id, query);
         }
 

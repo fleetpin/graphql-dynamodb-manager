@@ -1,7 +1,7 @@
 package com.fleetpin.graphql.database.manager;
 
+import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
 public class Query<T extends Table> {
 
@@ -9,11 +9,21 @@ public class Query<T extends Table> {
 	private final String startsWith;
 	private final String after;
 	private final Integer limit;
-	private final Integer afterPartition;
-	private final String parallelGrouping;
-	private final Integer parallelRequests;
 
-	Query(Class<T> type, String startsWith, String after, Integer limit, Integer afterPartition, Integer parallelRequests, String parallelGrouping) {
+	private final Map<String, ParallelStartsWith> afterParallel;
+	private final Integer parallelRequests;
+	private final String parallelGrouping;
+
+	public Query(Class<T> type, String startsWith, String after, Integer limit) {
+		this(type, startsWith, after, null, limit, null, null);
+	}
+
+	public Query(Class<T> type, String startsWith, Map<String, ParallelStartsWith> afterParallel, Integer limit, Integer parallelRequests, String parallelGrouping) {
+		this(type, startsWith, null, afterParallel, limit, parallelRequests, parallelGrouping);
+	}
+
+
+	private Query(Class<T> type, String startsWith, String after, Map<String, ParallelStartsWith> afterParallel, Integer limit, Integer parallelRequests, String parallelGrouping) {
 		if (type == null) {
 			throw new RuntimeException("type can not be null, did you forget to call .on(Table::class)?");
 		}
@@ -21,7 +31,7 @@ public class Query<T extends Table> {
 		this.startsWith = startsWith;
 		this.after = after;
 		this.limit = limit;
-		this.afterPartition = afterPartition;
+		this.afterParallel = afterParallel;
 		this.parallelRequests = parallelRequests;
 		this.parallelGrouping = parallelGrouping;
 	}
@@ -38,7 +48,9 @@ public class Query<T extends Table> {
 		return after;
 	}
 
-	public Integer getAfterPartition() { return afterPartition; }
+	public Map<String, ParallelStartsWith> getAfterParallel() {
+		return afterParallel;
+	}
 
 	public Integer getParallelRequestCount() { return parallelRequests; }
 

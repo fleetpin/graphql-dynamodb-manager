@@ -2,18 +2,14 @@ package com.fleetpin.graphql.database.manager;
 
 import java.util.function.Consumer;
 
-public class QueryBuilder<V extends Table> {
-	
-	private final Class<V> type;
-	private String startsWith;
-	private String after;
-	private Integer limit;
+public class QueryBuilder<V extends Table> implements IQueryBuilder<V> {
 
-    private Integer afterPartition;
-	private Integer parallelRequests;
-	private String parallelGrouping;
-	
-    private QueryBuilder(Class<V> type) {
+    protected final Class<V> type;
+	protected String startsWith;
+    protected String after;
+    protected Integer limit;
+
+    protected QueryBuilder(Class<V> type) {
     	this.type = type;
 	}
 
@@ -32,16 +28,10 @@ public class QueryBuilder<V extends Table> {
     	return this;
     }
 
-    public QueryBuilder<V> after(String from, Integer afterPartition) {
-        this.after = from;
-        this.afterPartition = afterPartition;
-        return this;
-    }
-
-    public QueryBuilder<V> parallel(Integer parallelRequests, String parallelGrouping) {
-        this.parallelRequests = parallelRequests;
-        this.parallelGrouping = parallelGrouping;
-        return this;
+    public ParallelQueryBuilder<V> parallel(Integer parallelRequests, String parallelGrouping) {
+        var parallelQueryBuilder = ParallelQueryBuilder.create(this);
+        parallelQueryBuilder.parallel(parallelRequests, parallelGrouping);
+        return parallelQueryBuilder;
     }
 
 
@@ -51,12 +41,10 @@ public class QueryBuilder<V extends Table> {
     }
 
     public Query<V> build() {
-    	return new Query<V>(type, startsWith, after, limit, afterPartition, parallelRequests, parallelGrouping);
+    	return new Query<V>(type, startsWith, after, limit);
     }
     
     public static <V extends Table> QueryBuilder<V> create(Class<V> type) {
     	return new QueryBuilder<V>(type);
     }
-    
-    
 }
