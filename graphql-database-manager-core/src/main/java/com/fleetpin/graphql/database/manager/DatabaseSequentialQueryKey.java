@@ -14,12 +14,12 @@ package com.fleetpin.graphql.database.manager;
 
 import java.util.Objects;
 
-public class DatabaseQueryKey<T extends Table> {
+public class DatabaseSequentialQueryKey<T extends Table> {
 
 	private final String organisationId;
-	private final Query<T> query;
+	private final SequentialQuery<T> query;
 
-	DatabaseQueryKey(String organisationId, Query<T> query) {
+	DatabaseSequentialQueryKey(String organisationId, SequentialQuery<T> query) {
 		super();
 		this.organisationId = organisationId;
 		this.query = query;
@@ -29,7 +29,7 @@ public class DatabaseQueryKey<T extends Table> {
 		return organisationId;
 	}
 
-	public Query<T> getQuery() {
+	public SequentialQuery<T> getQuery() {
 		return query;
 	}
 
@@ -46,7 +46,7 @@ public class DatabaseQueryKey<T extends Table> {
 			return false;
 		if (getClass() != obj.getClass())
 			return false;
-		DatabaseQueryKey other = (DatabaseQueryKey) obj;
+		DatabaseSequentialQueryKey other = (DatabaseSequentialQueryKey) obj;
 		return Objects.equals(organisationId, other.organisationId) && Objects.equals(query, other.query);
 	}
 	

@@ -28,7 +28,6 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 
-import javax.swing.text.html.Option;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
@@ -280,7 +279,7 @@ public class DynamoDb extends DatabaseDriver {
     }
 
     @Override
-    public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key) {
+    public <T extends Table> CompletableFuture<List<T>> query(DatabaseSequentialQueryKey<T> key) {
         var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
         String prefix = Optional.ofNullable(key.getQuery().getStartsWith()).orElse("");
         var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();

@@ -9,11 +9,18 @@ public interface KeyFactory {
         return new DatabaseKey<>(organisationId, type, id);
     }
 
-    static <T extends Table> DatabaseQueryKey<T> createDatabaseQueryKey(
+    static <T extends Table> DatabaseSequentialQueryKey<T> createDatabaseSequentialQueryKey(
             final String organisationId,
-            final Query<T> query
+            final SequentialQuery<T> query
     ) {
-        return new DatabaseQueryKey<>(organisationId, query);
+        return new DatabaseSequentialQueryKey<T>(organisationId, query);
+    }
+
+    static <T extends Table> DatabaseParallelQueryKey<T> createDatabaseParallelQueryKey(
+            final String organisationId,
+            final ParallelQuery<T> query
+    ) {
+        return new DatabaseParallelQueryKey<T>(organisationId, query);
     }
 
 	static <T extends Table> DatabaseQueryHistoryKey<T> createDatabaseQueryHistoryKey(String organisationId,

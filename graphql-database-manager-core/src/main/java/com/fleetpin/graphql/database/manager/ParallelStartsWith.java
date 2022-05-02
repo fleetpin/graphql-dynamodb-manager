@@ -9,7 +9,6 @@ public class ParallelStartsWith {
         this.index = index;
     }
 
-
     public String getParallelIndex() {
         return parallelIndex;
     }

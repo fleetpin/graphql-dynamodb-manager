@@ -34,7 +34,8 @@ public class Database {
 	private final DatabaseDriver driver;
 
 	private final TableDataLoader<DatabaseKey<Table>> items;
-	private final TableDataLoader<DatabaseQueryKey<Table>> queries;
+	private final TableDataLoader<DatabaseSequentialQueryKey<Table>> sequentialQueries;
+	private final TableDataLoader<DatabaseParallelQueryKey<Table>> parallelQueries;
 	private final TableDataLoader<DatabaseQueryHistoryKey<Table>> queryHistories;
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
@@ -48,24 +49,46 @@ public class Database {
 			return driver.get(keys);
 		}, DataLoaderOptions.newOptions().setMaxBatchSize(driver.maxBatchSize()))); // will auto call global
 
-		queries = new TableDataLoader<>(new DataLoader<DatabaseQueryKey<Table>, List<Table>>(keys -> {
-			return merge(keys.stream().map(key -> driver.query(key)));
+		sequentialQueries = new TableDataLoader<>(new DataLoader<DatabaseSequentialQueryKey<Table>, List<Table>>(keys -> {
+			return merge(keys.stream().map(key -> driver.sequentialQuery(key)));
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
-		
+
+		parallelQueries = new TableDataLoader<>(new DataLoader<DatabaseParallelQueryKey<Table>, List<Table>>(keys -> {
+			return merge(keys.stream().map(key -> driver.parallelQuery(key)));
+		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
+
 		queryHistories = new TableDataLoader<>(new DataLoader<DatabaseQueryHistoryKey<Table>, List<Table>>(keys -> {
 			return merge(keys.stream().map(key -> driver.queryHistory(key)));
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
 	}
 
-	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type, Function<QueryBuilder<T>, QueryBuilder<T>> func) {
-		return query(func.apply(QueryBuilder.create(type)).build());
+	public <T extends Table, R> CompletableFuture<R> query(Class<T> type, Function<SequentialQueryBuilder<T>, QueryBuilder<T, R>> func) {
+		var qb = func.apply(QueryBuilder.create(type));
+		return query(qb.build());
 	}
 
-	public <T extends Table> CompletableFuture<List<T>> query(Query<T> query) {
-		DatabaseQueryKey<Table> key = (DatabaseQueryKey<Table>) KeyFactory.createDatabaseQueryKey(organisationId, query);
-		CompletableFuture<List<T>> toReturn = queries.load(key);
-		return toReturn
-				.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toList()));
+//	public <T extends Table> CompletableFuture<List<T>> parallelQuery(Class<T> type, Function<ParallelQueryBuilder<T>, ParallelQueryBuilder<T>> func) {
+//		return query(func.apply(ParallelQueryBuilder.create(type)).build());
+//	}
+
+	public <T extends Table, R> CompletableFuture<R> query(Query<T, R> query) {
+		if (query instanceof SequentialQuery) {
+			var sq = (SequentialQuery<T>) query;
+
+			var key = KeyFactory.createDatabaseSequentialQueryKey(organisationId, sq);
+			CompletableFuture<List<T>> toReturn = sequentialQueries.load((DatabaseSequentialQueryKey<Table>) key);
+			return (CompletableFuture<R>) toReturn
+					.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toList()));
+		} else if (query instanceof  ParallelQuery) {
+			var pq = (ParallelQuery<T>) query;
+
+			var key = KeyFactory.createDatabaseParallelQueryKey(organisationId, pq);
+			CompletableFuture<List<T>> toReturn = parallelQueries.load((DatabaseParallelQueryKey<Table>) key);
+			return (CompletableFuture<R>) toReturn
+					.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toSet()));
+		} else {
+			throw new UnsupportedOperationException();
+		}
 	}
 	
 	public <T extends Table> CompletableFuture<List<T>> queryHistory(QueryHistory<T> queryHistory) {
@@ -154,7 +177,8 @@ public class Database {
 			}
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		queries.clearAll();
+    		sequentialQueries.clearAll();
+    		parallelQueries.clearAll();
 
     		if(deleteLinks) {
     			return deleteLinks(entity).thenCompose(t -> driver.delete(organisationId, entity));
@@ -190,7 +214,8 @@ public class Database {
 			}
 			//impact of clearing links to tricky
 			items.clearAll();
-			queries.clearAll();
+			sequentialQueries.clearAll();
+			parallelQueries.clearAll();
 			return driver.deleteLinks(organisationId, entity);
 		});
 	}
@@ -225,7 +250,8 @@ public class Database {
 			}
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		queries.clearAll();
+			sequentialQueries.clearAll();
+			parallelQueries.clearAll();
     		return driver.put(organisationId, entity, check);
 		});
 	}
@@ -238,7 +264,8 @@ public class Database {
 			}
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		queries.clearAll();
+			sequentialQueries.clearAll();
+			parallelQueries.clearAll();
     		return driver.put("global", entity, false);
 		});
 
@@ -268,8 +295,8 @@ public class Database {
 			return;
 		}
 
-		if(items.dispatchDepth() > 0 || queries.dispatchDepth() > 0 || queryHistories.dispatchDepth() > 0) {
-			CompletableFuture[] all = new CompletableFuture[] {items.dispatch(), queries.dispatch(), queryHistories.dispatch()};
+		if(items.dispatchDepth() > 0 || parallelQueries.dispatchDepth() > 0 || sequentialQueries.dispatchDepth() > 0 || queryHistories.dispatchDepth() > 0) {
+			CompletableFuture[] all = new CompletableFuture[] {items.dispatch(), sequentialQueries.dispatch(), parallelQueries.dispatch(), queryHistories.dispatch()};
 			CompletableFuture.allOf(all).whenComplete((response, error) -> {
 				//go around again
 				start(toReturn);
@@ -288,7 +315,8 @@ public class Database {
 
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
-    		queries.clearAll();
+			sequentialQueries.clearAll();
+			parallelQueries.clearAll();
 
     		for(String id: getLinkIds(entity, class1)) {
     			key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, class1, id);
@@ -332,7 +360,8 @@ public class Database {
 					entity.getId()
 			);
 			items.clear(key);
-			queries.clearAll();
+			sequentialQueries.clearAll();
+			parallelQueries.clearAll();
 
 			for (final String id : getLinkIds(entity, clazz)) {
 				key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, clazz, id);
