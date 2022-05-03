@@ -81,7 +81,7 @@ public class Database {
 			var key = KeyFactory.createDatabaseParallelQueryKey(organisationId, pq);
 			CompletableFuture<List<T>> toReturn = parallelQueries.load((DatabaseParallelQueryKey<Table>) key);
 			return (CompletableFuture<R>) toReturn
-					.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toSet()));
+					.thenApply(items -> items.stream().filter(Objects::nonNull).collect(Collectors.toList()));
 		} else {
 			throw new UnsupportedOperationException();
 		}
