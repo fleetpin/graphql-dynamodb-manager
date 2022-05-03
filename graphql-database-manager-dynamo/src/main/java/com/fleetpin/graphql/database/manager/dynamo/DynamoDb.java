@@ -67,8 +67,8 @@ public class DynamoDb extends DatabaseDriver {
 
 
     public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
-        var ofTypeKey = KeyFactory.createDatabaseQueryKey(organisationId, QueryBuilder.create(clazz).build());
-        var futureItems = query(ofTypeKey);
+        var ofTypeKey = KeyFactory.createDatabaseSequentialQueryKey(organisationId, SequentialQueryBuilder.create(clazz).build());
+        var futureItems = sequentialQuery(ofTypeKey);
         return futureItems.thenCompose(items ->
             CompletableFutureUtil.sequence(items.stream().map(x -> delete(organisationId, x))));
     }
@@ -279,14 +279,34 @@ public class DynamoDb extends DatabaseDriver {
     }
 
     @Override
-    public <T extends Table> CompletableFuture<List<T>> query(DatabaseSequentialQueryKey<T> key) {
+    public <T extends Table> CompletableFuture<List<T>> parallelQuery(DatabaseParallelQueryKey<T> key) {
         var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
         String prefix = Optional.ofNullable(key.getQuery().getStartsWith()).orElse("");
         var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
 
         var futures = entityTables.stream()
-            .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
-            .map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
+                .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
+                .map(pair -> queryParallel(pair.getKey(), pair.getValue(), id, key.getQuery()));
+
+        var future = CompletableFutureUtil.sequence(futures);
+
+        return future.thenApply(results -> {
+            var flattener = new Flattener(false);
+
+            results.forEach(list -> flattener.addItems(list));
+            return flattener.results(mapper, key.getQuery().getType(), Optional.ofNullable(key.getQuery().getLimit()));
+        });
+    }
+
+    @Override
+    public <T extends Table> CompletableFuture<List<T>> sequentialQuery(DatabaseSequentialQueryKey<T> key) {
+        var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
+        String prefix = Optional.ofNullable(key.getQuery().getStartsWith()).orElse("");
+        var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
+
+        var futures = entityTables.stream()
+                .flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
+                .map(pair -> sequentialQuery(pair.getKey(), pair.getValue(), id, key.getQuery()));
 
         var future = CompletableFutureUtil.sequence(futures);
 
@@ -504,7 +524,7 @@ public class DynamoDb extends DatabaseDriver {
     }
 
 
-    private CompletableFuture<List<DynamoItem>> queryParallel(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
+    private CompletableFuture<List<DynamoItem>> queryParallel(EntityTable table, AttributeValue organisationId, AttributeValue id, ParallelQuery<?> query) {
         var getAfter = query.getAfterParallel();
         var parrallelRequestCount = query.getParallelRequestCount();
         ArrayList<String> parallelIndicies = getAfter != null ? new ArrayList(getAfter.keySet()) : new ArrayList();
@@ -559,15 +579,7 @@ public class DynamoDb extends DatabaseDriver {
         return CompletableFutureUtil.sequence(result).thenApply(parts -> parts.stream().flatMap(p -> p.stream()).collect(Collectors.toList()));
     }
 
-    private CompletableFuture<List<DynamoItem>> query(EntityTable table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
-        if (query.getParallelRequestCount() != null &&
-            query.getParallelGrouping() != null &&
-            query.getParallelRequestCount() > 0 &&
-            table.getParallelIndex().isPresent()
-        ) {
-            return queryParallel(table, organisationId, id, query);
-        }
-
+    private CompletableFuture<List<DynamoItem>> sequentialQuery(EntityTable table, AttributeValue organisationId, AttributeValue id, SequentialQuery<?> query) {
         Map<String, AttributeValue> keyConditions = new HashMap<>();
         keyConditions.put(":organisationId", organisationId);
         keyConditions.put(":table", id);

@@ -5,7 +5,7 @@ import java.util.function.Consumer;
 public abstract class QueryBuilder<V extends Table, R> {
     protected final Class<V> type;
 	protected String startsWith;
-    protected String after;
+
     protected Integer limit;
 
     protected QueryBuilder(Class<V> type) {

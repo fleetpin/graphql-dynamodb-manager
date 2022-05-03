@@ -67,10 +67,6 @@ public class Database {
 		return query(qb.build());
 	}
 
-//	public <T extends Table> CompletableFuture<List<T>> parallelQuery(Class<T> type, Function<ParallelQueryBuilder<T>, ParallelQueryBuilder<T>> func) {
-//		return query(func.apply(ParallelQueryBuilder.create(type)).build());
-//	}
-
 	public <T extends Table, R> CompletableFuture<R> query(Query<T, R> query) {
 		if (query instanceof SequentialQuery) {
 			var sq = (SequentialQuery<T>) query;

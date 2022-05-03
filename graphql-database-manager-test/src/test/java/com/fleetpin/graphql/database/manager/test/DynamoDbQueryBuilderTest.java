@@ -24,7 +24,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.Arrays;
 
 final class DynamoDbQueryBuilderTest {
 	static class Ticket extends Table {
@@ -65,7 +64,7 @@ final class DynamoDbQueryBuilderTest {
 		db.put(new Ticket("budgetId1:sales;widgets:2021/01", "4 widgets")).get();
 		db.put(new Ticket("budgetId1:sales;widgets:2021/02", "5 widgets")).get();
 
-		var result2 = db.query(Ticket.class, builder -> builder.startsWith("budgetId1:").after("budgetId1:sales;trinkets:2020/10").limit(10)).get();
+		var result2 = db.query(Ticket.class, builder -> builder.startsWith ("budgetId1:").after("budgetId1:sales;trinkets:2020/10").limit(10)).get();
 		Assertions.assertEquals("budgetId1:sales;trinkets:2020/11", result2.get(0).getId());
 		Assertions.assertEquals(10, result2.size());
 	}
@@ -134,11 +133,11 @@ final class DynamoDbQueryBuilderTest {
 		var startsWith = new HashMap<String, ParallelStartsWith>();
 		startsWith.put("11", new ParallelStartsWith("0", "00000"));
 
-//		var result = db.query(BigData.class, builder -> builder.parallel(8, "grouping").after(startsWith)).get();
-//
-//		Assertions.assertEquals(5, result.size());
-//		Assertions.assertEquals("bigdata-12", result.get(0).name);
-//		Assertions.assertEquals("bigdata-58", result.get(result.size() - 1).name);
+		var result = db.query(BigData.class, builder -> builder.parallel(8, "grouping").after(startsWith)).get();
+
+		Assertions.assertEquals(5, result.size());
+		Assertions.assertEquals("bigdata-12", result.get(0).name);
+		Assertions.assertEquals("bigdata-58", result.get(result.size() - 1).name);
 	}
 
 	@TestDatabase

@@ -2,9 +2,9 @@ package com.fleetpin.graphql.database.manager;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.List;
 
-public class ParallelQuery<T extends Table> extends Query<T, Set<T>> {
+public class ParallelQuery<T extends Table> extends Query<T, List<T>> {
 	private final Map<String, ParallelStartsWith> afterParallel;
 	private final Integer parallelRequests;
 	private final String parallelGrouping;

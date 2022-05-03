@@ -1,10 +1,9 @@
 package com.fleetpin.graphql.database.manager;
 
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.List;
 
-public class ParallelQueryBuilder<V extends Table> extends QueryBuilder<V, Set<V>>  {
+public class ParallelQueryBuilder<V extends Table> extends QueryBuilder<V, List<V>>  {
     private Map<String, ParallelStartsWith> after;
     private Integer parallelRequests;
     private String parallelGrouping;
@@ -19,6 +18,16 @@ public class ParallelQueryBuilder<V extends Table> extends QueryBuilder<V, Set<V
         }
     }
 
+    @Override
+    public ParallelQueryBuilder<V> startsWith(String prefix) {
+        return (ParallelQueryBuilder<V>)super.startsWith(prefix);
+    }
+
+    @Override
+    public ParallelQueryBuilder<V> limit(Integer limit) {
+        return (ParallelQueryBuilder<V>)super.limit(limit);
+    }
+
     public ParallelQueryBuilder<V> after(Map<String, ParallelStartsWith> from) {
         this.after = from;
         return this;
@@ -30,8 +39,8 @@ public class ParallelQueryBuilder<V extends Table> extends QueryBuilder<V, Set<V
         return this;
     }
 
-    public Query<V, Set<V>> build() {
-        return new Query<V, Set<V>>(type, startsWith, after, limit, parallelRequests, parallelGrouping);
+    public ParallelQuery<V> build() {
+        return new ParallelQuery(type, startsWith, limit, after, parallelRequests, parallelGrouping);
     }
 }
 

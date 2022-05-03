@@ -1,7 +1,6 @@
 package com.fleetpin.graphql.database.manager;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 public class SequentialQueryBuilder<V extends Table> extends QueryBuilder<V, List<V>> {
     private String after;
@@ -9,6 +8,16 @@ public class SequentialQueryBuilder<V extends Table> extends QueryBuilder<V, Lis
     protected SequentialQueryBuilder(Class<V> type) {
     	super(type);
 	}
+
+    @Override
+    public SequentialQueryBuilder<V> startsWith(String prefix) {
+        return (SequentialQueryBuilder<V>)super.startsWith(prefix);
+    }
+
+    @Override
+    public SequentialQueryBuilder<V> limit(Integer limit) {
+        return (SequentialQueryBuilder<V>)super.limit(limit);
+    }
 
     public SequentialQueryBuilder<V> after(String from) {
     	this.after = from;
@@ -21,7 +30,7 @@ public class SequentialQueryBuilder<V extends Table> extends QueryBuilder<V, Lis
         return parallelQueryBuilder;
     }
 
-    public Query<V, List<V>> build() {
-    	return new Query<V, List<V>>(type, startsWith, after, limit);
+    public SequentialQuery<V> build() {
+    	return new SequentialQuery(type, startsWith, limit, after);
     }
 }
