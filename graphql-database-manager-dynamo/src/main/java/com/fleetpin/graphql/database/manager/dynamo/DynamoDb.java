@@ -181,8 +181,8 @@ public class DynamoDb extends DatabaseDriver {
             item.put("secondaryOrganisation", index);
         }
         if (entityTable.getParallelIndex().isPresent() && secondaryParallelisationGrouping != null) {
-            var hash = Hashing.crc32().hashString(entity.getId(), StandardCharsets.UTF_8).asInt();
-            var bytes = new StringBuilder(Integer.toBinaryString(hash)).toString();
+            var hash = Hashing.goodFastHash(32).hashString(entity.getId(), StandardCharsets.UTF_8).asInt();
+            var bytes = new StringBuilder(Integer.toBinaryString(hash)).subSequence(0, (int)Math.round(Math.log(this.maxParallelisation()) / Math.log(2))).toString();
             var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryParallelisationGrouping + ":" + bytes).build();
             item.put(entityTable.getParallelIndex().get(), index);
         }
@@ -216,11 +216,6 @@ public class DynamoDb extends DatabaseDriver {
     @Override
     public int maxBatchSize() {
         return 50 / entityTables.size();
-    }
-
-    @Override
-    public int maxParallelisation() {
-        return 1024;
     }
 
     @Override

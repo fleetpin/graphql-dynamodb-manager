@@ -111,8 +111,8 @@ final class DynamoDbIndexesTest {
 		var result = db.queryGlobalUnique(SimpleTable.class, "john").get();
 		var parallelIndex = TableAccess.getTableParallelIndex(result);
 
-		var hash = Hashing.crc32().hashString(result.getId(), StandardCharsets.UTF_8).asInt();
-		var bytes = new StringBuilder(Integer.toBinaryString(hash)).toString();
+		var hash = Hashing.goodFastHash(32).hashString(result.getId(), StandardCharsets.UTF_8).asInt();
+		var bytes = new StringBuilder(Integer.toBinaryString(hash)).subSequence(0, 8).toString();
 
 		Assertions.assertEquals("simpletables:" + entry1.getGrouping() + ":" + bytes, parallelIndex);
 	}
