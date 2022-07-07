@@ -137,7 +137,7 @@ public class TableUtil {
 	}
 
 
-	static AttributeValue toAttribute(JsonNode value) {
+	public static AttributeValue toAttribute(JsonNode value) {
 		switch (value.getNodeType()) {
 			case NUMBER:
 				return AttributeValue.builder().n(value.asText()).build();
@@ -198,7 +198,7 @@ public class TableUtil {
 		}
 	}
 
-	static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
+	public static <T> T convertTo(ObjectMapper mapper, Map<String, AttributeValue> item, Class<T> type) {
 		try {
 			ObjectNode objNode = mapper.createObjectNode();
 			item.forEach((key, v) -> {
@@ -210,7 +210,7 @@ public class TableUtil {
 		}
 	}
 
-	private static JsonNode toJson(ObjectMapper mapper, AttributeValue value) {
+	public static JsonNode toJson(ObjectMapper mapper, AttributeValue value) {
 		if (value.bool() != null) {
 			return BooleanNode.valueOf(value.bool());
 		}
