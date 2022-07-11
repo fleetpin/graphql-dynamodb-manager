@@ -30,8 +30,8 @@ jobs:
         git-release-bot-email: "release-bot@fleetpin.co.nz"
         
         gpg-enabled: "true"
-        gpg-key-id: ${{ secrets.GITHUB_GPG_KEY_ID }}
-        gpg-key: ${{ secrets.GITHUB_GPG_KEY }}
+        gpg-key-id: ${{ secrets.GPG_KEY_ID }}
+        gpg-key: ${{ secrets.GPG_KEY }}
         
         maven-repo-server-id: sonatype
         maven-repo-server-username: ${{ secrets.MVN_REPO_PRIVATE_REPO_USER }}
