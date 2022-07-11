@@ -1,15 +1,10 @@
 name: Release
 on: 
-  deployment
+  workflow_dispatch
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-    - name: update deploy status
-      uses: unacast/actions-github-deployment-status@0.2
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        status: in_progress
     - uses: actions/checkout@v2
     - uses: actions/cache@v1
       with:
@@ -38,9 +33,3 @@ jobs:
         maven-repo-server-password: ${{ secrets.MVN_REPO_PRIVATE_REPO_PASSWORD }}
         
         access-token: ${{ secrets.GITHUB_TOKEN }}
-    - name: update deploy status
-      uses: unacast/actions-github-deployment-status@0.2
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        status: ${{ job.status }}
-      if: always()
