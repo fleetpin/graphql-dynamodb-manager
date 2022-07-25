@@ -197,8 +197,8 @@ public class DynamoDb extends DatabaseDriver {
 
 
     public CompletableFuture<Void> bulkPut(List<PutValue> values) {
-        var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), 25);
-        var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), 25);
+        var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), BATCH_WRITE_SIZE);
+        var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), BATCH_WRITE_SIZE);
 
         var conditionalFuture = CompletableFuture.allOf(conditional.stream().map(part -> conditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
         var nonConditionalFuture = CompletableFuture.allOf(nonConditional.stream().map(part -> nonConditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
@@ -207,97 +207,7 @@ public class DynamoDb extends DatabaseDriver {
     }
 
 
-    private Map<String, AttributeValue> buildPutEntity(PutValue value) {
-        if (value.getEntity().getId() == null) {
-            value.getEntity().setId(idGenerator.get());
-            setCreatedAt(value.getEntity(), Instant.now());
-        }
-        if (value.getEntity().getCreatedAt() == null) {
-            setCreatedAt(value.getEntity(), Instant.now()); //if missing for what ever reason
-        }
-        final long revision = value.getEntity().getRevision();
-        setUpdatedAt(value.getEntity(), Instant.now());
-        var organisationIdAttribute = AttributeValue.builder().s(value.getOrganisationId()).build();
-        var id = AttributeValue.builder().s(table(value.getEntity().getClass()) + ":" + value.getEntity().getId()).build();
-        Map<String, AttributeValue> item = new HashMap<>();
-        item.put("organisationId", organisationIdAttribute);
-        item.put("id", id);
-        var entries = TableUtil.toAttributes(mapper, value.getEntity());
-        entries.remove("revision"); // needs to be at the top level as a limit on dynamo to be able to perform an atomic addition
-        item.put("revision", AttributeValue.builder().n(Long.toString(revision + 1)).build());
-        if (HistoryCoreUtil.hasHistory(value.getEntity())) {
-            item.put("history", AttributeValue.builder().bool(true).build());
-        }
-        item.put("item", AttributeValue.builder().m(entries).build());
-
-        Map<String, AttributeValue> links = new HashMap<>();
-        getLinks(value.getEntity()).asMap().forEach((table, link) -> {
-            if (!link.isEmpty()) {
-                links.put(table, AttributeValue.builder().ss(link).build());
-            }
-        });
-
-        item.put("links", AttributeValue.builder().m(links).build());
-        setSource(value.getEntity(), entityTable, getLinks(value.getEntity()), value.getOrganisationId());
-
-        String secondaryOrganisation = TableUtil.getSecondaryOrganisation(value.getEntity());
-        String secondaryGlobal = TableUtil.getSecondaryGlobal(value.getEntity());
-
-
-        if (secondaryGlobal != null) {
-            var index = AttributeValue.builder().s(table(value.getEntity().getClass()) + ":" + secondaryGlobal).build();
-            item.put("secondaryGlobal", index);
-        }
-        if (secondaryOrganisation != null) {
-            var index = AttributeValue.builder().s(table(value.getEntity().getClass()) + ":" + secondaryOrganisation).build();
-            item.put("secondaryOrganisation", index);
-        }
-        return item;
-    }
-
-    public TransactWriteItem buildTransactionWriteItem(PutValue value) {
-        final long revision = value.getEntity().getRevision();
-        String sourceTable = getSourceTable(value.getEntity());
-        var item = buildPutEntity(value);
-
-        return TransactWriteItem
-            .builder()
-            .put(builder ->
-                builder
-                .tableName(entityTable)
-                .item(item)
-                .applyMutation(conditional -> {
-                    if (value.getCheck()) {
-                        String sourceOrganisationId = getSourceOrganisationId(value.getEntity());
-
-                        if (sourceTable != null && !sourceTable.equals(entityTable) || !sourceOrganisationId.equals(value.getOrganisationId()) || revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
-                            conditional.conditionExpression("attribute_not_exists(revision)");
-                        } else {
-                            Map<String, AttributeValue> variables = new HashMap<>();
-                            variables.put(":revision", AttributeValue.builder().n(Long.toString(revision)).build());
-                            //check exists and matches revision
-                            conditional.expressionAttributeValues(variables);
-                            conditional.conditionExpression("revision = :revision");
-                        }
-
-                    }
-                })
-            )
-            .build();
-    }
-
-
-    public WriteRequest buildWriteRequest(PutValue value) {
-        var item = buildPutEntity(value);
-
-        return WriteRequest
-            .builder()
-            .putRequest(builder -> builder.item(item))
-            .build();
-    }
-
-
-    private <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
+    private <T extends Table> Map<String, AttributeValue> buildPutEntity(String organisationId, T entity) {
         if (entity.getId() == null) {
             entity.setId(idGenerator.get());
             setCreatedAt(entity, Instant.now());
@@ -327,8 +237,6 @@ public class DynamoDb extends DatabaseDriver {
             }
         });
 
-        String sourceTable = getSourceTable(entity);
-        
         item.put("links", AttributeValue.builder().m(links).build());
         setSource(entity, entityTable, getLinks(entity), organisationId);
 
@@ -344,6 +252,56 @@ public class DynamoDb extends DatabaseDriver {
             var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryOrganisation).build();
             item.put("secondaryOrganisation", index);
         }
+        return item;
+    }
+
+    public TransactWriteItem buildTransactionWriteItem(PutValue value) {
+        final long revision = value.getEntity().getRevision();
+        String sourceTable = getSourceTable(value.getEntity());
+        var item = buildPutEntity(value.getOrganisationId(), value.getEntity());
+
+        return TransactWriteItem
+            .builder()
+            .put(builder ->
+                builder
+                .tableName(entityTable)
+                .item(item)
+                .applyMutation(conditional -> {
+                    if (value.getCheck()) {
+                        String sourceOrganisationId = getSourceOrganisationId(value.getEntity());
+
+                        if (sourceTable != null && !sourceTable.equals(entityTable) || !sourceOrganisationId.equals(value.getOrganisationId()) || revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
+                            conditional.conditionExpression("attribute_not_exists(revision)");
+                        } else {
+                            Map<String, AttributeValue> variables = new HashMap<>();
+                            variables.put(":revision", AttributeValue.builder().n(Long.toString(revision)).build());
+                            //check exists and matches revision
+                            conditional.expressionAttributeValues(variables);
+                            conditional.conditionExpression("revision = :revision");
+                        }
+
+                    }
+                })
+            )
+            .build();
+    }
+
+
+    public WriteRequest buildWriteRequest(PutValue value) {
+        var item = buildPutEntity(value.getOrganisationId(), value.getEntity());
+
+        return WriteRequest
+            .builder()
+            .putRequest(builder -> builder.item(item))
+            .build();
+    }
+
+
+    private <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
+        final long revision = entity.getRevision();
+        String sourceTable = getSourceTable(entity);
+        var item = buildPutEntity(organisationId, entity);
+
         return client.putItem(request -> request.tableName(entityTable).item(item).applyMutation(mutator -> {
             if (check) {
                 String sourceOrganisationId = getSourceOrganisationId(entity);
@@ -365,9 +323,7 @@ public class DynamoDb extends DatabaseDriver {
             }
             Throwables.throwIfUnchecked(failure);
             throw new RuntimeException(failure);
-        }).thenApply(response -> {
-            return entity;
-        });
+        }).thenApply(response -> entity);
     }
 
     @Override
