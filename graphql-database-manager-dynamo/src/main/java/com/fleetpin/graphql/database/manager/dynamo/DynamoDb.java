@@ -12,8 +12,11 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.fleetpin.graphql.builder.SchemaBuilder;
 import com.fleetpin.graphql.database.manager.*;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
@@ -124,8 +127,168 @@ public class DynamoDb extends DatabaseDriver {
         }
     }
 
-    public <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
 
+    private CompletableFuture<?> conditionalBulkWrite(List<PutValue> items) {
+        var transactionWriteItems = items.stream().map(i -> buildTransactionWriteItem(i)).collect(Collectors.toList());
+
+       return client.transactWriteItems(builder -> builder.transactItems(transactionWriteItems)).handle((response, error) -> {
+           if (error == null) {
+               items.forEach(i -> {
+                   i.resolve();
+               });
+               return CompletableFuture.completedFuture(null);
+           } else {
+               if (error instanceof ConditionalCheckFailedException) {
+                   if (items.size() > 1) {
+                       var all = items
+                           .stream().map(i ->
+                               put(i.getOrganisationId(), i.getEntity(), i.getCheck()).whenComplete((res, e) -> {
+                                   if (e == null) {
+                                       i.resolve();
+                                   } else {
+                                       i.fail(e);
+                                   }
+                               })
+                           ).toArray(CompletableFuture[]::new);
+                       return CompletableFuture.allOf(all);
+                   } else {
+                       items.forEach(i -> i.fail(new RevisionMismatchException(error)));
+                       return CompletableFuture.completedFuture(null);
+                   }
+
+               } else {
+                   items.forEach(i -> i.fail(error));
+                   return CompletableFuture.completedFuture(null);
+               }
+           }
+       }).thenCompose(r -> r).exceptionally(ex -> {
+           items.forEach(i -> i.fail(ex));
+           return null;
+       });
+    }
+
+
+    private CompletableFuture<?> nonConditionalBulkWrite(List<PutValue> items) {
+        var writeRequests = items.stream().map(i -> buildWriteRequest(i)).collect(Collectors.toList());
+
+        return client.batchWriteItem(builder -> builder.requestItems(Map.of(entityTable, writeRequests))).handle((response, error) -> {
+            if (error == null) {
+                items.forEach(i -> {
+                    i.resolve();
+                });
+            } else {
+                items.forEach(i -> i.fail(error));
+            }
+            return CompletableFuture.completedFuture(null);
+        }).thenCompose(r -> r).exceptionally(ex -> {
+            items.forEach(i -> i.fail(ex));
+            return null;
+        });
+    }
+
+
+    public CompletableFuture<Void> bulkPut(List<PutValue> values) {
+        var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), 25);
+        var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), 25);
+
+        var conditionalFuture = CompletableFuture.allOf(conditional.stream().map(part -> conditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
+        var nonConditionalFuture = CompletableFuture.allOf(nonConditional.stream().map(part -> nonConditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
+
+        return CompletableFuture.allOf(conditionalFuture, nonConditionalFuture);
+    }
+
+
+    private Map<String, AttributeValue> buildPutEntity(PutValue value) {
+        if (value.getEntity().getId() == null) {
+            value.getEntity().setId(idGenerator.get());
+            setCreatedAt(value.getEntity(), Instant.now());
+        }
+        if (value.getEntity().getCreatedAt() == null) {
+            setCreatedAt(value.getEntity(), Instant.now()); //if missing for what ever reason
+        }
+        final long revision = value.getEntity().getRevision();
+        setUpdatedAt(value.getEntity(), Instant.now());
+        var organisationIdAttribute = AttributeValue.builder().s(value.getOrganisationId()).build();
+        var id = AttributeValue.builder().s(table(value.getEntity().getClass()) + ":" + value.getEntity().getId()).build();
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put("organisationId", organisationIdAttribute);
+        item.put("id", id);
+        var entries = TableUtil.toAttributes(mapper, value.getEntity());
+        entries.remove("revision"); // needs to be at the top level as a limit on dynamo to be able to perform an atomic addition
+        item.put("revision", AttributeValue.builder().n(Long.toString(revision + 1)).build());
+        if (HistoryCoreUtil.hasHistory(value.getEntity())) {
+            item.put("history", AttributeValue.builder().bool(true).build());
+        }
+        item.put("item", AttributeValue.builder().m(entries).build());
+
+        Map<String, AttributeValue> links = new HashMap<>();
+        getLinks(value.getEntity()).asMap().forEach((table, link) -> {
+            if (!link.isEmpty()) {
+                links.put(table, AttributeValue.builder().ss(link).build());
+            }
+        });
+
+        item.put("links", AttributeValue.builder().m(links).build());
+        setSource(value.getEntity(), entityTable, getLinks(value.getEntity()), value.getOrganisationId());
+
+        String secondaryOrganisation = TableUtil.getSecondaryOrganisation(value.getEntity());
+        String secondaryGlobal = TableUtil.getSecondaryGlobal(value.getEntity());
+
+
+        if (secondaryGlobal != null) {
+            var index = AttributeValue.builder().s(table(value.getEntity().getClass()) + ":" + secondaryGlobal).build();
+            item.put("secondaryGlobal", index);
+        }
+        if (secondaryOrganisation != null) {
+            var index = AttributeValue.builder().s(table(value.getEntity().getClass()) + ":" + secondaryOrganisation).build();
+            item.put("secondaryOrganisation", index);
+        }
+        return item;
+    }
+
+    public TransactWriteItem buildTransactionWriteItem(PutValue value) {
+        final long revision = value.getEntity().getRevision();
+        String sourceTable = getSourceTable(value.getEntity());
+        var item = buildPutEntity(value);
+
+        return TransactWriteItem
+            .builder()
+            .put(builder ->
+                builder
+                .tableName(entityTable)
+                .item(item)
+                .applyMutation(conditional -> {
+                    if (value.getCheck()) {
+                        String sourceOrganisationId = getSourceOrganisationId(value.getEntity());
+
+                        if (sourceTable != null && !sourceTable.equals(entityTable) || !sourceOrganisationId.equals(value.getOrganisationId()) || revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
+                            conditional.conditionExpression("attribute_not_exists(revision)");
+                        } else {
+                            Map<String, AttributeValue> variables = new HashMap<>();
+                            variables.put(":revision", AttributeValue.builder().n(Long.toString(revision)).build());
+                            //check exists and matches revision
+                            conditional.expressionAttributeValues(variables);
+                            conditional.conditionExpression("revision = :revision");
+                        }
+
+                    }
+                })
+            )
+            .build();
+    }
+
+
+    public WriteRequest buildWriteRequest(PutValue value) {
+        var item = buildPutEntity(value);
+
+        return WriteRequest
+            .builder()
+            .putRequest(builder -> builder.item(item))
+            .build();
+    }
+
+
+    private <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
         if (entity.getId() == null) {
             entity.setId(idGenerator.get());
             setCreatedAt(entity, Instant.now());
@@ -194,7 +357,6 @@ public class DynamoDb extends DatabaseDriver {
             Throwables.throwIfUnchecked(failure);
             throw new RuntimeException(failure);
         }).thenApply(response -> {
-            entity.setRevision(revision + 1);
             return entity;
         });
     }

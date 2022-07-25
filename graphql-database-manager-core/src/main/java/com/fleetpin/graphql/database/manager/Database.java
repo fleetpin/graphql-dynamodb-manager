@@ -36,6 +36,7 @@ public class Database {
 	private final TableDataLoader<DatabaseKey<Table>> items;
 	private final TableDataLoader<DatabaseQueryKey<Table>> queries;
 	private final TableDataLoader<DatabaseQueryHistoryKey<Table>> queryHistories;
+	private final DataWriter put;
 
 	private final Function<Table, CompletableFuture<Boolean>> putAllow;
 
@@ -49,12 +50,14 @@ public class Database {
 		}, DataLoaderOptions.newOptions().setMaxBatchSize(driver.maxBatchSize()))); // will auto call global
 
 		queries = new TableDataLoader<>(new DataLoader<DatabaseQueryKey<Table>, List<Table>>(keys -> {
-			return merge(keys.stream().map(key -> driver.query(key)));
+			return merge(keys.stream().map(driver::query));
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
 		
 		queryHistories = new TableDataLoader<>(new DataLoader<DatabaseQueryHistoryKey<Table>, List<Table>>(keys -> {
-			return merge(keys.stream().map(key -> driver.queryHistory(key)));
+			return merge(keys.stream().map(driver::queryHistory));
 		}, DataLoaderOptions.newOptions().setBatchingEnabled(false))); // will auto call global
+
+		put = new DataWriter(driver::bulkPut);
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> query(Class<T> type, Function<QueryBuilder<T>, QueryBuilder<T>> func) {
@@ -226,7 +229,8 @@ public class Database {
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-    		return driver.put(organisationId, entity, check);
+
+    		return put.put(organisationId, entity, check);
 		});
 	}
 
@@ -239,7 +243,7 @@ public class Database {
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-    		return driver.put("global", entity, false);
+			return put.put(organisationId, entity, false);
 		});
 
 	}
@@ -268,8 +272,8 @@ public class Database {
 			return;
 		}
 
-		if(items.dispatchDepth() > 0 || queries.dispatchDepth() > 0 || queryHistories.dispatchDepth() > 0) {
-			CompletableFuture[] all = new CompletableFuture[] {items.dispatch(), queries.dispatch(), queryHistories.dispatch()};
+		if(items.dispatchDepth() > 0 || queries.dispatchDepth() > 0 || queryHistories.dispatchDepth() > 0 || put.dispatchSize() > 0) {
+			CompletableFuture[] all = new CompletableFuture[] {items.dispatch(), queries.dispatch(), queryHistories.dispatch(), put.dispatch()};
 			CompletableFuture.allOf(all).whenComplete((response, error) -> {
 				//go around again
 				start(toReturn);

@@ -27,8 +27,7 @@ public abstract class DatabaseDriver {
 
     public abstract <T extends Table> CompletableFuture<T> deleteLinks(String organisationId, T entity);
 
-    public abstract <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check);
-
+    public abstract CompletableFuture<Void> bulkPut(List<PutValue> values);
 
     public abstract <T extends Table> CompletableFuture<List<T>> get(List<DatabaseKey<T>> keys);
 
