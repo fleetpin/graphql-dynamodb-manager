@@ -31,6 +31,7 @@ import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -136,31 +137,39 @@ public class DynamoDb extends DatabaseDriver {
                items.forEach(i -> {
                    i.resolve();
                });
-               return CompletableFuture.completedFuture(null);
            } else {
-               if (error instanceof ConditionalCheckFailedException) {
-                   if (items.size() > 1) {
-                       var all = items
-                           .stream().map(i ->
-                               put(i.getOrganisationId(), i.getEntity(), i.getCheck()).whenComplete((res, e) -> {
-                                   if (e == null) {
-                                       i.resolve();
-                                   } else {
-                                       i.fail(e);
-                                   }
-                               })
-                           ).toArray(CompletableFuture[]::new);
-                       return CompletableFuture.allOf(all);
-                   } else {
-                       items.forEach(i -> i.fail(new RevisionMismatchException(error)));
-                       return CompletableFuture.completedFuture(null);
-                   }
+               if (error instanceof CompletionException && error.getCause() != null) {
+                   error = error.getCause();
+               }
 
-               } else {
-                   items.forEach(i -> i.fail(error));
-                   return CompletableFuture.completedFuture(null);
+               if (error instanceof TransactionCanceledException) {
+                   var conditionFailed = ((TransactionCanceledException) error).cancellationReasons().stream().anyMatch(reason -> reason.code().equals("ConditionalCheckFailed"));
+                   if (conditionFailed) {
+                       if (items.size() > 1) {
+                           var all = items
+                                   .stream().map(i ->
+                                           put(i.getOrganisationId(), i.getEntity(), i.getCheck()).whenComplete((res, e) -> {
+                                               if (e == null) {
+                                                   i.resolve();
+                                               } else {
+                                                   i.fail(e);
+                                               }
+                                           })
+                                   ).toArray(CompletableFuture[]::new);
+                           return CompletableFuture.allOf(all);
+                       } else {
+                           for (PutValue i : items) {
+                               i.fail(new RevisionMismatchException(error));
+                           }
+                           return CompletableFuture.completedFuture(null);
+                       }
+                   }
+               }
+               for (PutValue i : items) {
+                   i.fail(error);
                }
            }
+           return CompletableFuture.completedFuture(null);
        }).thenCompose(r -> r).exceptionally(ex -> {
            items.forEach(i -> i.fail(ex));
            return null;

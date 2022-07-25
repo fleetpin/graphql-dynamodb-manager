@@ -243,7 +243,7 @@ public class Database {
 			DatabaseKey<Table> key = (DatabaseKey<Table>) KeyFactory.createDatabaseKey(organisationId, entity.getClass(), entity.getId());
     		items.clear(key);
     		queries.clearAll();
-			return put.put(organisationId, entity, false);
+			return put.put("global", entity, false);
 		});
 
 	}

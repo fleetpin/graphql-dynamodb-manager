@@ -22,9 +22,9 @@ public class DataWriter {
 
     public synchronized CompletableFuture<Void> dispatch() {
         //clear and take all from thing
-        bulkWriter.apply(toPut);
+        var future = bulkWriter.apply(toPut);
         toPut.clear();
-        return null;
+        return future;
     }
 
     public synchronized <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
