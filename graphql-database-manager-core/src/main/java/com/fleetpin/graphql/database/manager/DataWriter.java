@@ -5,12 +5,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 public class DataWriter {
-
     private final Function<List<PutValue>, CompletableFuture<Void>> bulkWriter;
-
-    // private { organisationId, entity: check, CompletableFutureToResolve} [] // concurrent linked hash set, put java hash code and equals on org and entity Id
     private List<PutValue> toPut = new ArrayList<>();
-
 
     public DataWriter(Function<List<PutValue>, CompletableFuture<Void>> bulkWriter) {
         this.bulkWriter = bulkWriter;
