@@ -12,8 +12,11 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.fleetpin.graphql.builder.SchemaBuilder;
 import com.fleetpin.graphql.database.manager.*;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
@@ -28,6 +31,7 @@ import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -45,18 +49,20 @@ public class DynamoDb extends DatabaseDriver {
     private final DynamoDbAsyncClient client;
     private final ObjectMapper mapper;
     private final Supplier<String> idGenerator;
+    private final int batchWriteSize;
 
     public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
-        this(mapper, entityTables, null, client, idGenerator);
+        this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE);
     }
 
-    public DynamoDb(ObjectMapper mapper, List<String> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
+    public DynamoDb(ObjectMapper mapper, List<String> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator, int batchWriteSize) {
         this.mapper = mapper;
         this.entityTables = entityTables;
         this.historyTable = historyTable;
         this.entityTable = entityTables.get(entityTables.size() - 1);
         this.client = client;
         this.idGenerator = idGenerator;
+        this.batchWriteSize = batchWriteSize;
     }
 
 
@@ -124,8 +130,86 @@ public class DynamoDb extends DatabaseDriver {
         }
     }
 
-    public <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
 
+    private CompletableFuture<?> conditionalBulkWrite(List<PutValue> items) {
+        var transactionWriteItems = items.stream().map(i -> buildTransactionWriteItem(i)).collect(Collectors.toList());
+
+       return client.transactWriteItems(builder -> builder.transactItems(transactionWriteItems)).handle((response, error) -> {
+           if (error == null) {
+               items.forEach(i -> {
+                   i.resolve();
+               });
+           } else {
+               if (error instanceof CompletionException && error.getCause() != null) {
+                   error = error.getCause();
+               }
+
+               if (error instanceof TransactionCanceledException) {
+                   var conditionFailed = ((TransactionCanceledException) error).cancellationReasons().stream().anyMatch(reason -> reason.code().equals("ConditionalCheckFailed"));
+                   if (conditionFailed) {
+                       if (items.size() > 1) {
+                           var all = items
+                                   .stream().map(i ->
+                                           put(i.getOrganisationId(), i.getEntity(), i.getCheck()).whenComplete((res, e) -> {
+                                               if (e == null) {
+                                                   i.resolve();
+                                               } else {
+                                                   i.fail(e);
+                                               }
+                                           })
+                                   ).toArray(CompletableFuture[]::new);
+                           return CompletableFuture.allOf(all);
+                       } else {
+                           for (PutValue i : items) {
+                               i.fail(new RevisionMismatchException(error));
+                           }
+                           return CompletableFuture.completedFuture(null);
+                       }
+                   }
+               }
+               for (PutValue i : items) {
+                   i.fail(error);
+               }
+           }
+           return CompletableFuture.completedFuture(null);
+       }).thenCompose(r -> r).exceptionally(ex -> {
+           items.forEach(i -> i.fail(ex));
+           return null;
+       });
+    }
+
+
+    private CompletableFuture<?> nonConditionalBulkWrite(List<PutValue> items) {
+        var writeRequests = items.stream().map(i -> buildWriteRequest(i)).collect(Collectors.toList());
+
+        return client.batchWriteItem(builder -> builder.requestItems(Map.of(entityTable, writeRequests))).handle((response, error) -> {
+            if (error == null) {
+                items.forEach(i -> {
+                    i.resolve();
+                });
+            } else {
+                items.forEach(i -> i.fail(error));
+            }
+            return CompletableFuture.completedFuture(null);
+        }).thenCompose(r -> r).exceptionally(ex -> {
+            items.forEach(i -> i.fail(ex));
+            return null;
+        });
+    }
+
+
+    public CompletableFuture<Void> bulkPut(List<PutValue> values) {
+        var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), batchWriteSize);
+        var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), batchWriteSize);
+
+        var conditionalFuture = CompletableFuture.allOf(conditional.stream().map(part -> conditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
+        var nonConditionalFuture = CompletableFuture.allOf(nonConditional.stream().map(part -> nonConditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
+
+        return CompletableFuture.allOf(conditionalFuture, nonConditionalFuture);
+    }
+
+
+    private <T extends Table> Map<String, AttributeValue> buildPutEntity(String organisationId, T entity) {
         if (entity.getId() == null) {
             entity.setId(idGenerator.get());
             setCreatedAt(entity, Instant.now());
@@ -155,8 +239,6 @@ public class DynamoDb extends DatabaseDriver {
             }
         });
 
-        String sourceTable = getSourceTable(entity);
-        
         item.put("links", AttributeValue.builder().m(links).build());
         setSource(entity, entityTable, getLinks(entity), organisationId);
 
@@ -172,6 +254,56 @@ public class DynamoDb extends DatabaseDriver {
             var index = AttributeValue.builder().s(table(entity.getClass()) + ":" + secondaryOrganisation).build();
             item.put("secondaryOrganisation", index);
         }
+        return item;
+    }
+
+    public TransactWriteItem buildTransactionWriteItem(PutValue value) {
+        final long revision = value.getEntity().getRevision();
+        String sourceTable = getSourceTable(value.getEntity());
+        var item = buildPutEntity(value.getOrganisationId(), value.getEntity());
+
+        return TransactWriteItem
+            .builder()
+            .put(builder ->
+                builder
+                .tableName(entityTable)
+                .item(item)
+                .applyMutation(conditional -> {
+                    if (value.getCheck()) {
+                        String sourceOrganisationId = getSourceOrganisationId(value.getEntity());
+
+                        if (sourceTable != null && !sourceTable.equals(entityTable) || !sourceOrganisationId.equals(value.getOrganisationId()) || revision == 0) { //we confirm row does not exist with a revision since entry might predate feature
+                            conditional.conditionExpression("attribute_not_exists(revision)");
+                        } else {
+                            Map<String, AttributeValue> variables = new HashMap<>();
+                            variables.put(":revision", AttributeValue.builder().n(Long.toString(revision)).build());
+                            //check exists and matches revision
+                            conditional.expressionAttributeValues(variables);
+                            conditional.conditionExpression("revision = :revision");
+                        }
+
+                    }
+                })
+            )
+            .build();
+    }
+
+
+    public WriteRequest buildWriteRequest(PutValue value) {
+        var item = buildPutEntity(value.getOrganisationId(), value.getEntity());
+
+        return WriteRequest
+            .builder()
+            .putRequest(builder -> builder.item(item))
+            .build();
+    }
+
+
+    private <T extends Table> CompletableFuture<T> put(String organisationId, T entity, boolean check) {
+        final long revision = entity.getRevision();
+        String sourceTable = getSourceTable(entity);
+        var item = buildPutEntity(organisationId, entity);
+
         return client.putItem(request -> request.tableName(entityTable).item(item).applyMutation(mutator -> {
             if (check) {
                 String sourceOrganisationId = getSourceOrganisationId(entity);
@@ -193,10 +325,7 @@ public class DynamoDb extends DatabaseDriver {
             }
             Throwables.throwIfUnchecked(failure);
             throw new RuntimeException(failure);
-        }).thenApply(response -> {
-            entity.setRevision(revision + 1);
-            return entity;
-        });
+        }).thenApply(response -> entity);
     }
 
     @Override

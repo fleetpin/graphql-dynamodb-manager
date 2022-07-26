@@ -113,7 +113,7 @@ final class DynamoDbQueryBuilderTest {
 	void testBig(final Database db) throws InterruptedException, ExecutionException {
 		var n = 1000;
 		List<String> ids = Stream.iterate(1, i -> i + 1)
-				.map(i -> getId(i))
+			.map(i -> getId(i))
 				.limit(n)
 				.collect(Collectors.toList());
 
