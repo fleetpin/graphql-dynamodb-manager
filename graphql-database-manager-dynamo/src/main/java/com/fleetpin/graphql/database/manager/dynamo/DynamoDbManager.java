@@ -58,6 +58,7 @@ public final class DynamoDbManager extends DatabaseManager {
 		private Supplier<String> idGenerator;
 		private DatabaseDriver database;
 		private String historyTable;
+		private int batchWriteSize = 25;
 		
 		
 		public DyanmoDbManagerBuilder dynamoDbAsyncClient(DynamoDbAsyncClient client) {
@@ -96,6 +97,14 @@ public final class DynamoDbManager extends DatabaseManager {
 			this.database = database;
 			return this;
 		}
+
+		public DyanmoDbManagerBuilder batchWriteSize(int batchWriteSize) {
+			if (batchWriteSize < 0 || batchWriteSize > 25) {
+				throw new RuntimeException("Batch write size must be between 0-25");
+			}
+			this.batchWriteSize = batchWriteSize;
+			return this;
+		}
 		
 		public DynamoDbManager build() {
 			Preconditions.checkNotNull(tables, "Tables must be set");
@@ -116,7 +125,7 @@ public final class DynamoDbManager extends DatabaseManager {
 				idGenerator = () -> UUID.randomUUID().toString();
 			}
 
-			database = Objects.requireNonNullElse(database, new DynamoDb(mapper, tables, historyTable, client, idGenerator));
+			database = Objects.requireNonNullElse(database, new DynamoDb(mapper, tables, historyTable, client, idGenerator, batchWriteSize));
 
 			return new DynamoDbManager(mapper, idGenerator, client, database);
 		}

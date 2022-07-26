@@ -49,18 +49,20 @@ public class DynamoDb extends DatabaseDriver {
     private final DynamoDbAsyncClient client;
     private final ObjectMapper mapper;
     private final Supplier<String> idGenerator;
+    private final int batchWriteSize;
 
     public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
-        this(mapper, entityTables, null, client, idGenerator);
+        this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE);
     }
 
-    public DynamoDb(ObjectMapper mapper, List<String> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
+    public DynamoDb(ObjectMapper mapper, List<String> entityTables, String historyTable, DynamoDbAsyncClient client, Supplier<String> idGenerator, int batchWriteSize) {
         this.mapper = mapper;
         this.entityTables = entityTables;
         this.historyTable = historyTable;
         this.entityTable = entityTables.get(entityTables.size() - 1);
         this.client = client;
         this.idGenerator = idGenerator;
+        this.batchWriteSize = batchWriteSize;
     }
 
 
@@ -197,8 +199,8 @@ public class DynamoDb extends DatabaseDriver {
 
 
     public CompletableFuture<Void> bulkPut(List<PutValue> values) {
-        var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), BATCH_WRITE_SIZE);
-        var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), BATCH_WRITE_SIZE);
+        var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), batchWriteSize);
+        var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), batchWriteSize);
 
         var conditionalFuture = CompletableFuture.allOf(conditional.stream().map(part -> conditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
         var nonConditionalFuture = CompletableFuture.allOf(nonConditional.stream().map(part -> nonConditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
