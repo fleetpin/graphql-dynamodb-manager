@@ -89,7 +89,7 @@ public class TableUtil {
 		return null;
 	}
 
-	static Map<String, AttributeValue> toAttributes(ObjectMapper mapper, Object entity) {
+	public static Map<String, AttributeValue> toAttributes(ObjectMapper mapper, Object entity) {
 		Map<String, AttributeValue> entries = new HashMap<>();
 		ObjectNode tree = mapper.valueToTree(entity);
 
