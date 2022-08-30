@@ -32,6 +32,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -42,7 +44,7 @@ public class DynamoDb extends DatabaseDriver {
     private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
     private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
     private static final int BATCH_WRITE_SIZE = 25;
-
+    
     private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
     private final String historyTable;
     private final String entityTable;
@@ -345,8 +347,6 @@ public class DynamoDb extends DatabaseDriver {
                 organisation.put("id", value);
                 organisation.put("organisationId", AttributeValue.builder().s(key.getOrganisationId()).build());
                 entries.add(organisation);
-            } else {
-                System.out.println("null organisation " + key.getType());
             }
             var global = new HashMap<String, AttributeValue>();
             global.put("id", value);
@@ -359,28 +359,45 @@ public class DynamoDb extends DatabaseDriver {
         for (String table : this.entityTables) {
             items.put(table, KeysAndAttributes.builder().keys(entries).consistentRead(true).build());
         }
-        return client.batchGetItem(builder -> builder.requestItems(items)).thenApply(response -> {
-            var responseItems = response.responses();
+        
+        return getItems(0, items, new Flattener(false)).thenApply(flattener -> {
+        	 var toReturn = new ArrayList<T>();
+             for (var key : keys) {
 
-            var flattener = new Flattener(false);
-            entityTables.forEach(table -> {
-                flattener.add(table, responseItems.get(table));
-            });
-            var toReturn = new ArrayList<T>();
-            for (var key : keys) {
-
-                var item = flattener.get(key.getType(), key.getId());
-                if (item == null) {
-                    toReturn.add(null);
-                } else {
-                    toReturn.add(item.convertTo(mapper, key.getType()));
-                }
-            }
-            return toReturn;
+                 var item = flattener.get(key.getType(), key.getId());
+                 if (item == null) {
+                     toReturn.add(null);
+                 } else {
+                     toReturn.add(item.convertTo(mapper, key.getType()));
+                 }
+             }
+             return toReturn;
         });
     }
-
-    @Override
+    
+    private CompletableFuture<Flattener> getItems(int count, Map<String, KeysAndAttributes> items, Flattener flattener) {
+    	if(count > 10) {
+    		throw new RuntimeException("Failed to get keys from dynamo after 10 attempts");
+    	}
+    	var delay = CompletableFuture.delayedExecutor(100 * count, TimeUnit.MILLISECONDS);
+    	return CompletableFuture.supplyAsync(() -> {
+    		return client.batchGetItem(builder -> builder.requestItems(items)).thenCompose(response -> {
+                var responseItems = response.responses();
+        		entityTables.forEach(table -> {
+                    flattener.add(table, responseItems.get(table));
+                });
+        		
+        		if(!response.unprocessedKeys().isEmpty()) {
+        			return getItems(count, response.unprocessedKeys(), flattener);
+        		}else {
+        			return CompletableFuture.completedFuture(flattener);
+        		}
+        		
+        	});
+    	}, delay).thenCompose(t -> t);
+	}
+    
+	@Override
     public <T extends Table> CompletableFuture<List<T>> getViaLinks(String organisationId, Table entry, Class<T> type, TableDataLoader<DatabaseKey<Table>> items) {
         String tableTarget = table(type);
         var links = getLinks(entry).get(tableTarget);
