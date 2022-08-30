@@ -19,7 +19,7 @@ public class DataWriter {
     public synchronized CompletableFuture<Void> dispatch() {
         //clear and take all from thing
         var future = bulkWriter.apply(toPut);
-        toPut.clear();
+        toPut = new ArrayList<>();
         return future;
     }
 
