@@ -12,17 +12,15 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import java.util.Map;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.TableAccess;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-
+import java.util.Map;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-public class DynamoItem implements Comparable<DynamoItem>{
+public class DynamoItem implements Comparable<DynamoItem> {
 
 	private final String table;
 	private final Map<String, AttributeValue> item;
@@ -38,19 +36,21 @@ public class DynamoItem implements Comparable<DynamoItem>{
 		this.links = HashMultimap.create();
 
 		var links = item.get("links");
-		if(links != null) {
-			links.m().forEach((t, value) -> {
-				this.links.putAll(t, value.ss());
-			});
+		if (links != null) {
+			links
+				.m()
+				.forEach((t, value) -> {
+					this.links.putAll(t, value.ss());
+				});
 		}
 		this.id = item.get("id").s();
-		
+
 		this.organisationId = item.get("organisationId").s();
 	}
 
 	public boolean isDeleted() {
 		var deleted = item.get("deleted");
-		if(deleted != null && deleted.bool()) {
+		if (deleted != null && deleted.bool()) {
 			return true;
 		}
 		return false;
@@ -58,25 +58,25 @@ public class DynamoItem implements Comparable<DynamoItem>{
 
 	//TODO: AWS has made this more difficult with version 2 of the api keep an eye out might get easy again in the future
 	public <T> T convertTo(ObjectMapper mapper, Class<T> type) {
-		if(isDeleted()) {
+		if (isDeleted()) {
 			return null;
 		}
 		var table = TableUtil.convertTo(mapper, item.get("item"), type);
-		if(table instanceof Table) {
+		if (table instanceof Table) {
 			Table t = (Table) table;
 			var revision = item.get("revision");
-			if(revision != null) {
+			if (revision != null) {
 				t.setRevision(Long.parseLong(revision.n()));
 			}
 			TableAccess.setTableSource(t, this.table, links, item.get("organisationId").s());
 		}
 		return table;
 	}
-	
+
 	public String getTable() {
 		return table;
 	}
-	
+
 	Map<String, AttributeValue> getItem() {
 		return item;
 	}
@@ -84,7 +84,7 @@ public class DynamoItem implements Comparable<DynamoItem>{
 	public Multimap<String, String> getLinks() {
 		return links;
 	}
-	
+
 	public String getId() {
 		return id;
 	}
@@ -96,16 +96,13 @@ public class DynamoItem implements Comparable<DynamoItem>{
 
 	public String getField(String tableTarget) {
 		var attribute = item.get(tableTarget);
-		if(attribute == null) {
+		if (attribute == null) {
 			return null;
 		}
 		return attribute.s();
 	}
-	
+
 	public String getOrganisationId() {
 		return organisationId;
 	}
-
-
-
 }

@@ -5,6 +5,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 public class DataWriter {
+
 	private final Function<List<PutValue>, CompletableFuture<Void>> bulkWriter;
 	private final List<PutValue> toPut = new ArrayList<>();
 

@@ -15,11 +15,9 @@ package com.fleetpin.graphql.database.manager.util;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-
 import java.util.Map;
 
 public interface BackupItem {
-
 	String getTable();
 
 	Map<String, JsonNode> getItem();
@@ -29,5 +27,4 @@ public interface BackupItem {
 	String getId();
 
 	String getOrganisationId();
-
 }

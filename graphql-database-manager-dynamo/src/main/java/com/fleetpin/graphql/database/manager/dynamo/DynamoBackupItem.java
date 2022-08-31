@@ -19,9 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
-
 import java.util.Map;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupItem {
 
@@ -32,31 +31,28 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 	private HashMultimap<String, String> links;
 	private String organisationId;
 
-
-	public DynamoBackupItem() {
-	}
+	public DynamoBackupItem() {}
 
 	public DynamoBackupItem(String table, Map<String, AttributeValue> item, ObjectMapper objectMapper) {
-
 		objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
 		this.table = table;
 		this.item = (Map<String, JsonNode>) TableUtil.convertTo(objectMapper, item, Map.class);
 
-
 		this.links = HashMultimap.create();
 
 		var links = item.get("links");
 		if (links != null) {
-			links.m().forEach((t, value) -> {
-				this.links.putAll(t, value.ss());
-			});
+			links
+				.m()
+				.forEach((t, value) -> {
+					this.links.putAll(t, value.ss());
+				});
 		}
 		this.id = item.get("id").s();
 
 		this.organisationId = item.get("organisationId").s();
 	}
-
 
 	public String getTable() {
 		return table;
@@ -65,7 +61,6 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 	public Map<String, JsonNode> getItem() {
 		return item;
 	}
-
 
 	@JsonIgnore
 	public HashMultimap<String, String> getLinks() {
@@ -81,10 +76,7 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 		return getId().compareTo(o.getId());
 	}
 
-
 	public String getOrganisationId() {
 		return organisationId;
 	}
-
-
 }

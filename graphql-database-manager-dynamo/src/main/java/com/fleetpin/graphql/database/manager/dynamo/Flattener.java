@@ -12,42 +12,38 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import java.util.*;
-import java.util.stream.Collectors;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
-
+import java.util.*;
+import java.util.stream.Collectors;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public final class Flattener {
 
 	private final Map<String, DynamoItem> lookup;
 	private final boolean includeOrganisationId;
-	
+
 	Flattener(boolean includeOrganisationId) {
 		lookup = new HashMap<>();
 		this.includeOrganisationId = includeOrganisationId;
 	}
-	
-	
+
 	public void add(String table, List<Map<String, AttributeValue>> list) {
 		list.forEach(item -> {
 			var i = new DynamoItem(table, item);
-			if(i.isDeleted()) {
+			if (i.isDeleted()) {
 				lookup.remove(getId(i));
-			}else {
+			} else {
 				lookup.merge(getId(i), i, this::merge);
 			}
 		});
-		
 	}
 
 	private String getId(DynamoItem item) {
-		if(includeOrganisationId) {
+		if (includeOrganisationId) {
 			return item.getOrganisationId() + ":" + item.getId();
-		}else {
+		} else {
 			return item.getId();
 		}
 	}
@@ -56,22 +52,20 @@ public final class Flattener {
 		return lookup.get(TableCoreUtil.table(type) + ":" + id);
 	}
 
-
 	public void addItems(List<DynamoItem> list) {
 		list.forEach(item -> {
-			if(item.isDeleted()) {
+			if (item.isDeleted()) {
 				lookup.remove(getId(item));
-			}else {
+			} else {
 				lookup.merge(getId(item), item, this::merge);
 			}
 		});
-		
 	}
-	
+
 	public DynamoItem merge(DynamoItem existing, DynamoItem replace) {
 		var item = new HashMap<>(replace.getItem());
 		//only links in parent
-		if(item.get("item") == null) {
+		if (item.get("item") == null) {
 			item.put("item", existing.getItem().get("item"));
 		}
 		var toReturn = new DynamoItem(replace.getTable(), item);
@@ -89,5 +83,4 @@ public final class Flattener {
 		Collections.sort(items);
 		return items.stream().limit(limit.orElse(Integer.MAX_VALUE)).map(t -> t.convertTo(mapper, type)).collect(Collectors.toList());
 	}
-
 }

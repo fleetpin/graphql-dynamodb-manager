@@ -1,77 +1,77 @@
 package com.fleetpin.graphql.database.manager.dynamo;
 
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
-import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
+import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 
 public class DynamoQuerySubscriber implements Subscriber<QueryResponse> {
-    private final ArrayList<DynamoItem> stuff;
-    private final  AtomicInteger togo;
-    private Subscription s;
-    private final CompletableFuture<List<DynamoItem>> future = new CompletableFuture<List<DynamoItem>>();
-    private final String table;
 
-    protected DynamoQuerySubscriber(String table) {
-        this(table, null);
-    }
+	private final ArrayList<DynamoItem> stuff;
+	private final AtomicInteger togo;
+	private Subscription s;
+	private final CompletableFuture<List<DynamoItem>> future = new CompletableFuture<List<DynamoItem>>();
+	private final String table;
 
-    protected DynamoQuerySubscriber(String table, Integer limit) {
-        this.table = table;
+	protected DynamoQuerySubscriber(String table) {
+		this(table, null);
+	}
 
-        if (limit != null) {
-            this.togo = new AtomicInteger(limit);
-            this.stuff= new ArrayList<>(limit);
-        } else {
-            this.togo = null;
-            this.stuff = new ArrayList<>();
-        }
-    }
+	protected DynamoQuerySubscriber(String table, Integer limit) {
+		this.table = table;
 
-    @Override
-    public void onSubscribe(Subscription s) {
-        this.s = s;
-        s.request(1);
-    }
+		if (limit != null) {
+			this.togo = new AtomicInteger(limit);
+			this.stuff = new ArrayList<>(limit);
+		} else {
+			this.togo = null;
+			this.stuff = new ArrayList<>();
+		}
+	}
 
-    @Override
-    public void onNext(QueryResponse r) {
-        try {
-            var stream = r.items().stream();
+	@Override
+	public void onSubscribe(Subscription s) {
+		this.s = s;
+		s.request(1);
+	}
 
-            if (togo != null) {
-                stream = stream.takeWhile(__ -> togo.getAndDecrement() >= 0);
-            }
+	@Override
+	public void onNext(QueryResponse r) {
+		try {
+			var stream = r.items().stream();
 
-            stream.map(item -> new DynamoItem(this.table, item)).forEach(stuff::add);
+			if (togo != null) {
+				stream = stream.takeWhile(__ -> togo.getAndDecrement() >= 0);
+			}
 
-            if (togo == null || togo.get() > 0) {
-                this.s.request(1);
-            } else {
-                s.cancel();
-                this.onComplete();
-            }
-        } catch (Exception e) {
-            this.onError(e);
-            s.cancel();
-        }
-    }
+			stream.map(item -> new DynamoItem(this.table, item)).forEach(stuff::add);
 
-    @Override
-    public void onError(Throwable t) {
-        future.completeExceptionally(t);
-    }
+			if (togo == null || togo.get() > 0) {
+				this.s.request(1);
+			} else {
+				s.cancel();
+				this.onComplete();
+			}
+		} catch (Exception e) {
+			this.onError(e);
+			s.cancel();
+		}
+	}
 
-    @Override
-    public void onComplete() {
-        future.complete(stuff);
-    }
+	@Override
+	public void onError(Throwable t) {
+		future.completeExceptionally(t);
+	}
 
-    public CompletableFuture<List<DynamoItem>> getFuture() {
-        return this.future;
-    }
+	@Override
+	public void onComplete() {
+		future.complete(stuff);
+	}
+
+	public CompletableFuture<List<DynamoItem>> getFuture() {
+		return this.future;
+	}
 }

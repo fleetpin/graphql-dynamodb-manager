@@ -40,17 +40,10 @@ public class DatabaseQueryHistoryKey<T extends Table> {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
+		if (this == obj) return true;
+		if (obj == null) return false;
+		if (getClass() != obj.getClass()) return false;
 		DatabaseQueryHistoryKey other = (DatabaseQueryHistoryKey) obj;
 		return Objects.equals(organisationId, other.organisationId) && Objects.equals(queryHistory, other.queryHistory);
 	}
-	
-	
-	
-
 }

@@ -1,11 +1,9 @@
 package com.fleetpin.graphql.database.dynamo.history.lambda;
 
+import com.amazonaws.services.lambda.runtime.events.DynamodbEvent.DynamodbStreamRecord;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import com.amazonaws.services.lambda.runtime.events.DynamodbEvent.DynamodbStreamRecord;
-
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.Identity;
@@ -15,7 +13,6 @@ import software.amazon.awssdk.services.dynamodb.model.StreamRecord;
 public class DynamoUtil {
 
 	public static Record toV2(DynamodbStreamRecord record) {
-
 		var builder = Record.builder();
 		builder.awsRegion(record.getAwsRegion());
 		builder.dynamodb(toV2(record.getDynamodb()));
@@ -28,7 +25,7 @@ public class DynamoUtil {
 	}
 
 	public static Identity toV2(com.amazonaws.services.dynamodbv2.model.Identity userIdentity) {
-		if(userIdentity == null) {
+		if (userIdentity == null) {
 			return null;
 		}
 		var builder = Identity.builder();
@@ -51,8 +48,7 @@ public class DynamoUtil {
 		return builder.build();
 	}
 
-	public static Map<String, AttributeValue> toV2(
-			Map<String, com.amazonaws.services.dynamodbv2.model.AttributeValue> attribute) {
+	public static Map<String, AttributeValue> toV2(Map<String, com.amazonaws.services.dynamodbv2.model.AttributeValue> attribute) {
 		if (attribute == null) {
 			return null;
 		}
@@ -72,12 +68,10 @@ public class DynamoUtil {
 			return AttributeValue.builder().nul(value.getNULL()).build();
 		}
 		if (value.getBS() != null) {
-			return AttributeValue.builder()
-					.bs(value.getBS().stream().map(SdkBytes::fromByteBuffer).collect(Collectors.toList())).build();
+			return AttributeValue.builder().bs(value.getBS().stream().map(SdkBytes::fromByteBuffer).collect(Collectors.toList())).build();
 		}
 		if (value.getL() != null) {
-			return AttributeValue.builder().l(value.getL().stream().map(DynamoUtil::toV2).collect(Collectors.toList()))
-					.build();
+			return AttributeValue.builder().l(value.getL().stream().map(DynamoUtil::toV2).collect(Collectors.toList())).build();
 		}
 		if (value.getM() != null) {
 			return AttributeValue.builder().m(toV2(value.getM())).build();
@@ -96,5 +90,4 @@ public class DynamoUtil {
 		}
 		throw new RuntimeException("Unknown type " + value);
 	}
-
 }

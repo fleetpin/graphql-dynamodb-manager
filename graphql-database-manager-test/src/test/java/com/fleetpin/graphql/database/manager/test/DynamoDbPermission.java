@@ -15,13 +15,11 @@ package com.fleetpin.graphql.database.manager.test;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
-import org.junit.jupiter.api.Assertions;
-
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
+import org.junit.jupiter.api.Assertions;
 
 class DynamoDbPermission {
-
-	//TODO: to check the allowed to write logic. 
+	//TODO: to check the allowed to write logic.
 
 }

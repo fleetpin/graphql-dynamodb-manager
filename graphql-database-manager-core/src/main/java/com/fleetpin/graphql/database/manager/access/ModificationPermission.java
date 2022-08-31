@@ -13,10 +13,7 @@
 package com.fleetpin.graphql.database.manager.access;
 
 import com.fleetpin.graphql.database.manager.Table;
-
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
-public interface ModificationPermission extends Function<Table, CompletableFuture<Boolean>>{
-
-}
+public interface ModificationPermission extends Function<Table, CompletableFuture<Boolean>> {}

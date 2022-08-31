@@ -18,10 +18,9 @@ import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
-import org.junit.jupiter.api.Assertions;
-
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import org.junit.jupiter.api.Assertions;
 
 final class DynamoDbPutGetDeleteTest {
 
@@ -31,14 +30,14 @@ final class DynamoDbPutGetDeleteTest {
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
-		
+
 		String id = entry1.getId();
-		
+
 		entry1 = db.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
+
 		db.delete(entry1, false).get();
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertNull(entry1);
@@ -50,9 +49,9 @@ final class DynamoDbPutGetDeleteTest {
 		entry1 = db.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
-		
+
 		String id = entry1.getId();
-		
+
 		entry1 = db.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
@@ -63,109 +62,107 @@ final class DynamoDbPutGetDeleteTest {
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
 
-		
 		db.delete(entry1, false).get();
-		
+
 		//will not actually delete as is in global space
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
 	}
-	
+
 	@TestDatabase
-	void testClimbingSimplePutGetDelete(final @DatabaseNames({"prod", "stage"}) Database db, @DatabaseNames("prod") final Database dbProd) throws InterruptedException, ExecutionException {
+	void testClimbingSimplePutGetDelete(final @DatabaseNames({ "prod", "stage" }) Database db, @DatabaseNames("prod") final Database dbProd)
+		throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = dbProd.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
-		
+
 		String id = entry1.getId();
-		
+
 		entry1 = db.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
+
 		db.delete(entry1, false).get();
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertNull(entry1);
-		
+
 		entry1 = dbProd.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
+
 		var entry2 = new SimpleTable("two");
 		entry2.setId(entry1.getId());
 		db.put(entry2).get();
-		
+
 		entry1 = dbProd.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
 
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("two", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
 	}
-	
+
 	@TestDatabase
-	void testClimbingGlobalPutGetDelete(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames("prod") final Database dbProd) throws InterruptedException, ExecutionException {
+	void testClimbingGlobalPutGetDelete(@DatabaseNames({ "prod", "stage" }) final Database db, @DatabaseNames("prod") final Database dbProd)
+		throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = dbProd.putGlobal(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
-		
+
 		String id = entry1.getId();
-		
+
 		entry1 = db.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
+
 		//is global so should do nothing
 		db.delete(entry1, false).get();
 		entry1 = db.get(SimpleTable.class, id).get();
-		
+
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
+
 		entry1 = dbProd.get(SimpleTable.class, id).get();
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
+
 		var entry2 = new SimpleTable("two");
 		entry2.setId(entry1.getId());
 		db.put(entry2).get();
-		
+
 		entry1 = dbProd.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
 
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("two", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
-		
 	}
 
 	@TestDatabase
-	void testTwoOrganisationsPutGetDelete(final Database db, @DatabaseOrganisation("org-777") final Database db2) throws InterruptedException, ExecutionException {
+	void testTwoOrganisationsPutGetDelete(final Database db, @DatabaseOrganisation("org-777") final Database db2)
+		throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
 		entry1 = db.put(entry1).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
-		
+
 		String id = entry1.getId();
-		
+
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertNull(db2.get(SimpleTable.class, id).get());
 
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
-		
+
 		db.delete(entry1, false).get();
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertNull(entry1);
@@ -218,7 +215,7 @@ final class DynamoDbPutGetDeleteTest {
 		final var janeWasDeleted = db.get(SimpleTable.class, janeGetEntry.getId()).get();
 		Assertions.assertNull(janeWasDeleted);
 	}
-	
+
 	@TestDatabase
 	void testSameIdDifferentTypes(final Database db) throws InterruptedException, ExecutionException {
 		SimpleTable entry1 = new SimpleTable("garry");
@@ -229,23 +226,21 @@ final class DynamoDbPutGetDeleteTest {
 		entry2 = db.put(entry2).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertNotNull(entry1.getId());
-		
-		String id = entry1.getId();		
-		
+
+		String id = entry1.getId();
+
 		var entry1Future = db.get(SimpleTable.class, id);
 		var entry2Future = db.get(SimpleTable2.class, id);
-		
+
 		Assertions.assertEquals("garry", entry1Future.get().getName());
 		Assertions.assertEquals("bob", entry2Future.get().getName());
 	}
-	
-	
 
 	static class SimpleTable extends Table {
+
 		private String name;
 
-		public SimpleTable() {
-		}
+		public SimpleTable() {}
 
 		public SimpleTable(String name) {
 			this.name = name;
@@ -255,12 +250,12 @@ final class DynamoDbPutGetDeleteTest {
 			return name;
 		}
 	}
-	
+
 	static class SimpleTable2 extends Table {
+
 		private String name;
 
-		public SimpleTable2() {
-		}
+		public SimpleTable2() {}
 
 		public SimpleTable2(String name) {
 			this.name = name;

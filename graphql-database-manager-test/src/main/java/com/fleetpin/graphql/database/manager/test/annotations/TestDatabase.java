@@ -13,18 +13,17 @@
 package com.fleetpin.graphql.database.manager.test.annotations;
 
 import com.fleetpin.graphql.database.manager.test.TestDatabaseProvider;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ArgumentsSource;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ArgumentsSource;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @ParameterizedTest
 @ArgumentsSource(TestDatabaseProvider.class)
 public @interface TestDatabase {
-    String organisationId() default "organisation";
+	String organisationId() default "organisation";
 }

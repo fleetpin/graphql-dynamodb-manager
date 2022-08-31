@@ -13,6 +13,7 @@
 package com.fleetpin.graphql.database.manager.access;
 
 public class ForbiddenWriteException extends RuntimeException {
+
 	public ForbiddenWriteException(String msg) {
 		super(msg);
 	}

@@ -25,23 +25,20 @@ import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
-import org.junit.jupiter.api.Assertions;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import org.junit.jupiter.api.Assertions;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 final class DynamoDbBackupTest {
-
 
 	private ObjectMapper mapper = new ObjectMapper();
 
 	@TestDatabase
 	void testTakeBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
-
 		final var db0 = dynamoDbManager.getDatabase("organisation-0");
 		final var db1 = dynamoDbManager.getDatabase("organisation-1");
 		db0.start(new CompletableFuture<>());
@@ -51,7 +48,6 @@ final class DynamoDbBackupTest {
 		final var putBanana = db0.put(new SimpleTable("banana", "fruit")).get();
 		final var putBeer = db0.put(new Drink("Beer", true)).get();
 		final var putTomato = db1.put(new SimpleTable("tomato", "fruit")).get();
-
 
 		final var orgQuery1 = db0.takeBackup("organisation-0").get();
 		Assertions.assertNotNull(putAvocado);
@@ -66,9 +62,7 @@ final class DynamoDbBackupTest {
 		final var orgQuery2 = db1.takeBackup("organisation-1").get();
 		Assertions.assertNotNull(putTomato);
 		checkResponseNameField(orgQuery2, 0, List.of(putTomato.getName()));
-
 	}
-
 
 	@TestDatabase
 	void testRestoreBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
@@ -87,7 +81,6 @@ final class DynamoDbBackupTest {
 		items.put("alcoholic", AttributeValue.builder().bool(true).build());
 		items.put("id", AttributeValue.builder().s("drinks:" + DRINK_ID).build());
 		drinkAttributes.put("item", AttributeValue.builder().m(items).build());
-
 
 		Map<String, AttributeValue> simpleTableAttributes = new HashMap<>();
 		simpleTableAttributes.put("organisationId", AttributeValue.builder().s("organisation-0").build());
@@ -118,7 +111,6 @@ final class DynamoDbBackupTest {
 
 		Assertions.assertEquals("avocado", simpleTableExists.getName());
 		Assertions.assertEquals("fruit", simpleTableExists.getGlobalLookup());
-
 	}
 
 	@TestDatabase
@@ -139,7 +131,6 @@ final class DynamoDbBackupTest {
 
 		var response1 = db1.query(SimpleTable.class).get();
 		Assertions.assertEquals(1, response1.size());
-
 	}
 
 	@TestDatabase
@@ -198,26 +189,21 @@ final class DynamoDbBackupTest {
 
 		var response1 = db1.query(SimpleTable.class).get();
 		Assertions.assertEquals(1, response1.size());
-
 	}
 
 	private void checkResponseNameField(List<BackupItem> queryResult, Integer rank, List<String> names) {
 		var jsonMap = queryResult.get(rank).getItem();
 		ObjectMapper om = new ObjectMapper();
-		var itemMap = om.convertValue(jsonMap, new TypeReference<Map<String, Object>>() {
-		});
+		var itemMap = om.convertValue(jsonMap, new TypeReference<Map<String, Object>>() {});
 		Assertions.assertTrue(names.contains(((HashMap<String, Object>) itemMap.get("item")).get("name")));
-
-
 	}
 
 	public static class Drink extends Table {
+
 		private String name;
 		private Boolean alcoholic;
 
-
-		public Drink() {
-		}
+		public Drink() {}
 
 		public Drink(String name, Boolean alcoholic) {
 			this.name = name;
@@ -231,21 +217,19 @@ final class DynamoDbBackupTest {
 		public Boolean getAlcoholic() {
 			return alcoholic;
 		}
-
 	}
 
 	public static class SimpleTable extends Table {
+
 		private String name;
 		private String globalLookup;
 
-		public SimpleTable() {
-		}
+		public SimpleTable() {}
 
 		public SimpleTable(String name, String globalLookup) {
 			this.name = name;
 			this.globalLookup = globalLookup;
 		}
-
 
 		@SecondaryIndex
 		public String getName() {
@@ -256,6 +240,5 @@ final class DynamoDbBackupTest {
 		public String getGlobalLookup() {
 			return globalLookup;
 		}
-
 	}
 }

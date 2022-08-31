@@ -15,16 +15,17 @@ package com.fleetpin.graphql.database.manager.test;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
-import org.junit.jupiter.api.Assertions;
-
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Assertions;
 
 final class DynamoDbQueryBuilderTest {
+
 	static class Ticket extends Table {
+
 		private String value;
 
 		public Ticket(String id, String value) {
@@ -38,10 +39,7 @@ final class DynamoDbQueryBuilderTest {
 
 		@Override
 		public String toString() {
-			return "Ticket{" +
-					"id='" + getId() + '\'' +
-					", value='" + value + '\'' +
-					'}';
+			return "Ticket{" + "id='" + getId() + '\'' + ", value='" + value + '\'' + '}';
 		}
 	}
 
@@ -68,6 +66,7 @@ final class DynamoDbQueryBuilderTest {
 	}
 
 	static class BigData extends Table {
+
 		private String name;
 		private Double[][] matrix;
 
@@ -85,11 +84,9 @@ final class DynamoDbQueryBuilderTest {
 		m[0][0] = r.nextDouble();
 		for (int i = 0; i < m.length; i++) {
 			for (int j = 0; j < m[i].length; j++) {
-				if (i == 0 && j == 0) continue;
-				else if (j == 0) {
+				if (i == 0 && j == 0) continue; else if (j == 0) {
 					m[i][j] = m[i - 1][m[i - 1].length - 1] + k;
-				}
-				else m[i][j] = m[i][j - 1] + k;
+				} else m[i][j] = m[i][j - 1] + k;
 			}
 		}
 
@@ -99,7 +96,7 @@ final class DynamoDbQueryBuilderTest {
 	static String getId(int i) {
 		return String.format("%04d", i);
 	}
-	
+
 	private void swallow(CompletableFuture<?> f) {
 		try {
 			f.get();
@@ -112,16 +109,14 @@ final class DynamoDbQueryBuilderTest {
 	@TestDatabase
 	void testBig(final Database db) throws InterruptedException, ExecutionException {
 		var n = 1000;
-		List<String> ids = Stream.iterate(1, i -> i + 1)
-			.map(i -> getId(i))
-				.limit(n)
-				.collect(Collectors.toList());
+		List<String> ids = Stream.iterate(1, i -> i + 1).map(i -> getId(i)).limit(n).collect(Collectors.toList());
 
-		var l = Stream.iterate(1, i -> i + 1)
-				.limit(n)
-				// Must pick a sufficiently sized matrix in order to force multiple pages to test limit, 100 works well
-				.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
-				.collect(Collectors.toList());
+		var l = Stream
+			.iterate(1, i -> i + 1)
+			.limit(n)
+			// Must pick a sufficiently sized matrix in order to force multiple pages to test limit, 100 works well
+			.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
+			.collect(Collectors.toList());
 
 		l.stream().map(db::put).forEach(this::swallow);
 
@@ -135,16 +130,14 @@ final class DynamoDbQueryBuilderTest {
 	@TestDatabase
 	void testBigPlusGlobal(final Database db) throws InterruptedException, ExecutionException {
 		var n = 400;
-		List<String> ids = Stream.iterate(1, i -> i + 1)
-				.map(i -> getId(i))
-				.limit(n)
-				.collect(Collectors.toList());
+		List<String> ids = Stream.iterate(1, i -> i + 1).map(i -> getId(i)).limit(n).collect(Collectors.toList());
 
-		var l = Stream.iterate(1, i -> i + 1)
-				.limit(n)
-				// Must pick a sufficiently sized matrix in order to force multiple pages to test limit, 100 works well
-				.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
-				.collect(Collectors.toList());
+		var l = Stream
+			.iterate(1, i -> i + 1)
+			.limit(n)
+			// Must pick a sufficiently sized matrix in order to force multiple pages to test limit, 100 works well
+			.map(i -> new BigData(ids.get(i - 1), "bigdata-" + i.toString(), createMatrix(100)))
+			.collect(Collectors.toList());
 
 		l.stream().map(db::put).forEach(this::swallow);
 		db.putGlobal(new BigData(getId(999), "big global", createMatrix(100)));

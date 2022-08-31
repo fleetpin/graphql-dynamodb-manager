@@ -22,7 +22,7 @@ public class Query<T extends Table> {
 	public Class<T> getType() {
 		return type;
 	}
-	
+
 	public String getStartsWith() {
 		return startsWith;
 	}
@@ -31,12 +31,13 @@ public class Query<T extends Table> {
 		return after;
 	}
 
-
 	public Integer getLimit() {
 		return limit;
 	}
 
-	public boolean hasLimit() { return getLimit() != null; }
+	public boolean hasLimit() {
+		return getLimit() != null;
+	}
 
 	@Override
 	public int hashCode() {
@@ -45,17 +46,15 @@ public class Query<T extends Table> {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
+		if (this == obj) return true;
+		if (obj == null) return false;
+		if (getClass() != obj.getClass()) return false;
 		Query other = (Query) obj;
-		return Objects.equals(after, other.after) && Objects.equals(limit, other.limit)
-				&& Objects.equals(startsWith, other.startsWith)
-				&& Objects.equals(type, other.type);
+		return (
+			Objects.equals(after, other.after) &&
+			Objects.equals(limit, other.limit) &&
+			Objects.equals(startsWith, other.startsWith) &&
+			Objects.equals(type, other.type)
+		);
 	}
-
-    
 }

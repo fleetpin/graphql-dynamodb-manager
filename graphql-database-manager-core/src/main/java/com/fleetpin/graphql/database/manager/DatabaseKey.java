@@ -45,24 +45,15 @@ public class DatabaseKey<T extends Table> {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
+		if (this == obj) return true;
+		if (obj == null) return false;
+		if (getClass() != obj.getClass()) return false;
 		DatabaseKey other = (DatabaseKey) obj;
-		return Objects.equals(id, other.id) && Objects.equals(organisationId, other.organisationId)
-				&& Objects.equals(type, other.type);
+		return Objects.equals(id, other.id) && Objects.equals(organisationId, other.organisationId) && Objects.equals(type, other.type);
 	}
 
 	@Override
 	public String toString() {
 		return "DatabaseKey [organisationId=" + organisationId + ", type=" + type + ", id=" + id + "]";
 	}
-	
-	
-	
-	
-
 }

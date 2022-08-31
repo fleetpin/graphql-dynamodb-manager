@@ -12,6 +12,24 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.BinaryNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.DoubleNode;
+import com.fasterxml.jackson.databind.node.LongNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
+import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
+import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
+import com.fleetpin.graphql.database.manager.util.BackupItem;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.LinkedHashMultimap;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Collection;
@@ -28,26 +46,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.BinaryNode;
-import com.fasterxml.jackson.databind.node.BooleanNode;
-import com.fasterxml.jackson.databind.node.DoubleNode;
-import com.fasterxml.jackson.databind.node.LongNode;
-import com.fasterxml.jackson.databind.node.NullNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-
-import com.fasterxml.jackson.databind.node.TextNode;
-import com.fleetpin.graphql.database.manager.Table;
-import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
-import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
-import com.fleetpin.graphql.database.manager.util.BackupItem;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.LinkedHashMultimap;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructList;
 import software.amazon.awssdk.core.util.DefaultSdkAutoConstructMap;
@@ -73,11 +71,11 @@ public class TableUtil {
 	}
 
 	static String getSecondaryOrganisation(Table entity) {
-		for(var method: entity.getClass().getMethods()) {
-			if(method.isAnnotationPresent(SecondaryIndex.class)) {
+		for (var method : entity.getClass().getMethods()) {
+			if (method.isAnnotationPresent(SecondaryIndex.class)) {
 				try {
 					var secondary = method.invoke(entity);
-					if(secondary instanceof Optional) {
+					if (secondary instanceof Optional) {
 						secondary = ((Optional) secondary).orElse(null);
 					}
 					return (String) secondary;
@@ -102,15 +100,13 @@ public class TableUtil {
 			}
 		});
 		return entries;
-
 	}
 
 	static Map<String, AttributeValue> toAttributes(ObjectMapper mapper, BackupItem entity) {
 		Map<String, AttributeValue> entries = new HashMap<>();
 		//Handle links specially, so remove here
 		var entityItem = entity.getItem();
-		LinkedHashMap<String, String[]> links = mapper.convertValue(entityItem.get("links"), new TypeReference<>() {
-		});
+		LinkedHashMap<String, String[]> links = mapper.convertValue(entityItem.get("links"), new TypeReference<>() {});
 
 		if (links != null) {
 			entityItem.remove("links");
@@ -135,7 +131,6 @@ public class TableUtil {
 
 		return entries;
 	}
-
 
 	public static AttributeValue toAttribute(JsonNode value) {
 		switch (value.getNodeType()) {
@@ -176,7 +171,6 @@ public class TableUtil {
 	private static AttributeValue processArray(JsonNode value) {
 		return basicArray(value);
 	}
-
 
 	private static AttributeValue basicArray(JsonNode value) {
 		List<AttributeValue> array = stream(value).map(TableUtil::toAttribute).collect(Collectors.toList());
@@ -267,23 +261,30 @@ public class TableUtil {
 			if (value.m().isEmpty()) {
 				return NullNode.instance;
 			}
-			value.m().forEach((key, v) -> {
-				objNode.set(key, toJson(mapper, v));
-			});
+			value
+				.m()
+				.forEach((key, v) -> {
+					objNode.set(key, toJson(mapper, v));
+				});
 			return objNode;
 		}
 		throw new RuntimeException("Unsupported type " + value);
 	}
 
-
 	static <T> CompletableFuture<List<T>> all(List<CompletableFuture<T>> collect) {
-		return CompletableFuture.allOf(collect.toArray(CompletableFuture[]::new))
-				.thenApply(__ -> collect.stream().map(m -> {
-					try {
-						return m.get();
-					} catch (InterruptedException | ExecutionException e) {
-						throw new RuntimeException(e);
-					}
-				}).collect(Collectors.toList()));
+		return CompletableFuture
+			.allOf(collect.toArray(CompletableFuture[]::new))
+			.thenApply(__ ->
+				collect
+					.stream()
+					.map(m -> {
+						try {
+							return m.get();
+						} catch (InterruptedException | ExecutionException e) {
+							throw new RuntimeException(e);
+						}
+					})
+					.collect(Collectors.toList())
+			);
 	}
 }

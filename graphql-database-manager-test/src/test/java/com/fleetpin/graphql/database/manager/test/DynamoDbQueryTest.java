@@ -16,12 +16,12 @@ import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
-import org.junit.jupiter.api.Assertions;
-
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
+import org.junit.jupiter.api.Assertions;
 
 final class DynamoDbQueryTest {
+
 	@TestDatabase
 	void testSimpleQuery(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new SimpleTable("garry")).get();
@@ -38,7 +38,7 @@ final class DynamoDbQueryTest {
 		Assertions.assertEquals("garry", entries.get(2).name);
 	}
 
-	@TestDatabase()
+	@TestDatabase
 	void testTwoTablesQuery(final Database db) throws InterruptedException, ExecutionException {
 		db.put(new SimpleTable("garry")).get();
 		db.put(new SimpleTable("bob")).get();
@@ -63,7 +63,6 @@ final class DynamoDbQueryTest {
 
 		Assertions.assertEquals("ed", entriesOther.get(0).name);
 		Assertions.assertEquals("eddie", entriesOther.get(1).name);
-
 	}
 
 	@TestDatabase
@@ -90,12 +89,11 @@ final class DynamoDbQueryTest {
 
 		Assertions.assertEquals("bob", entries.get(0).name);
 		Assertions.assertEquals("garry", entries.get(1).name);
-
 	}
 
-
 	@TestDatabase
-	void testClimbingQuery(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames({"prod"}) final Database dbProd) throws InterruptedException, ExecutionException {
+	void testClimbingQuery(@DatabaseNames({ "prod", "stage" }) final Database db, @DatabaseNames({ "prod" }) final Database dbProd)
+		throws InterruptedException, ExecutionException {
 		var garry = dbProd.put(new SimpleTable("garry")).get();
 		var garryLocal = new SimpleTable("GARRY");
 		garryLocal.setId(garry.getId());
@@ -121,11 +119,11 @@ final class DynamoDbQueryTest {
 
 		Assertions.assertEquals("GARRY", entries.get(0).name);
 		Assertions.assertEquals("frank", entries.get(1).name);
-
 	}
 
 	@TestDatabase
-	void testClimbingGlobalQuery(@DatabaseNames({"prod", "stage"}) final Database db, @DatabaseNames("prod") final Database dbProd) throws InterruptedException, ExecutionException {
+	void testClimbingGlobalQuery(@DatabaseNames({ "prod", "stage" }) final Database db, @DatabaseNames("prod") final Database dbProd)
+		throws InterruptedException, ExecutionException {
 		var garry = dbProd.put(new SimpleTable("garry")).get();
 		var garryLocal = new SimpleTable("GARRY");
 		garryLocal.setId(garry.getId());
@@ -154,10 +152,10 @@ final class DynamoDbQueryTest {
 	}
 
 	static class SimpleTable extends Table {
+
 		private String name;
 
-		public SimpleTable() {
-		}
+		public SimpleTable() {}
 
 		public SimpleTable(String name) {
 			this.name = name;
@@ -166,7 +164,7 @@ final class DynamoDbQueryTest {
 		public String getName() {
 			return name;
 		}
-		
+
 		@Override
 		public String toString() {
 			return name;
@@ -174,10 +172,10 @@ final class DynamoDbQueryTest {
 	}
 
 	static class AnotherTable extends Table {
+
 		private String name;
 
-		public AnotherTable() {
-		}
+		public AnotherTable() {}
 
 		public AnotherTable(String name) {
 			this.name = name;
@@ -187,5 +185,4 @@ final class DynamoDbQueryTest {
 			return name;
 		}
 	}
-
 }
