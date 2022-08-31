@@ -14,10 +14,7 @@ package com.fleetpin.graphql.database.manager.dynamo;
 
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.builder.SchemaBuilder;
 import com.fleetpin.graphql.database.manager.*;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
@@ -29,7 +26,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -43,6 +39,7 @@ public class DynamoDb extends DatabaseDriver {
 	private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
 	private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
 	private static final int BATCH_WRITE_SIZE = 25;
+	private static final int MAX_RETRY = 10;
 
 	private final List<String> entityTables; //is in reverse order so easy to over ride as we go through
 	private final String historyTable;
@@ -51,9 +48,10 @@ public class DynamoDb extends DatabaseDriver {
 	private final ObjectMapper mapper;
 	private final Supplier<String> idGenerator;
 	private final int batchWriteSize;
+	private final int maxRetry;
 
 	public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
-		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE);
+		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE, MAX_RETRY);
 	}
 
 	public DynamoDb(
@@ -62,7 +60,8 @@ public class DynamoDb extends DatabaseDriver {
 		String historyTable,
 		DynamoDbAsyncClient client,
 		Supplier<String> idGenerator,
-		int batchWriteSize
+		int batchWriteSize,
+		int maxRetry
 	) {
 		this.mapper = mapper;
 		this.entityTables = entityTables;
@@ -71,6 +70,7 @@ public class DynamoDb extends DatabaseDriver {
 		this.client = client;
 		this.idGenerator = idGenerator;
 		this.batchWriteSize = batchWriteSize;
+		this.maxRetry = maxRetry;
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
@@ -224,10 +224,10 @@ public class DynamoDb extends DatabaseDriver {
 	}
 
 	private CompletableFuture<?> putItems(int count, Map<String, List<WriteRequest>> data) {
-		if (count > 10) {
-			throw new RuntimeException("Failed to get keys from dynamo after 10 attempts");
+		if (count > maxRetry) {
+			throw new RuntimeException("Failed to put items into dynamo after " + maxRetry + " attempts");
 		}
-		var delay = CompletableFuture.delayedExecutor(100 * count, TimeUnit.MILLISECONDS);
+		var delay = CompletableFuture.delayedExecutor(100 * count * count, TimeUnit.MILLISECONDS);
 		return CompletableFuture
 			.supplyAsync(
 				() -> {
@@ -429,10 +429,10 @@ public class DynamoDb extends DatabaseDriver {
 	}
 
 	private CompletableFuture<Flattener> getItems(int count, Map<String, KeysAndAttributes> items, Flattener flattener) {
-		if (count > 10) {
-			throw new RuntimeException("Failed to get keys from dynamo after 10 attempts");
+		if (count > maxRetry) {
+			throw new RuntimeException("Failed to get keys from dynamo after " + maxRetry + " attempts");
 		}
-		var delay = CompletableFuture.delayedExecutor(100 * count, TimeUnit.MILLISECONDS);
+		var delay = CompletableFuture.delayedExecutor(100 * count * count, TimeUnit.MILLISECONDS);
 		return CompletableFuture
 			.supplyAsync(
 				() -> {

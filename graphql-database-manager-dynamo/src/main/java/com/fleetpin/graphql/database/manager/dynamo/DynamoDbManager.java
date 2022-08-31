@@ -58,6 +58,7 @@ public final class DynamoDbManager extends DatabaseManager {
 		private DatabaseDriver database;
 		private String historyTable;
 		private int batchWriteSize = 25;
+		private int maxRetry = 10;
 
 		public DyanmoDbManagerBuilder dynamoDbAsyncClient(DynamoDbAsyncClient client) {
 			this.client = client;
@@ -102,6 +103,11 @@ public final class DynamoDbManager extends DatabaseManager {
 			return this;
 		}
 
+		public DyanmoDbManagerBuilder maxRetry(int maxRetry) {
+			this.maxRetry = maxRetry;
+			return this;
+		}
+
 		public DynamoDbManager build() {
 			Preconditions.checkNotNull(tables, "Tables must be set");
 			Preconditions.checkArgument(!tables.isEmpty(), "Empty table array");
@@ -126,7 +132,7 @@ public final class DynamoDbManager extends DatabaseManager {
 				idGenerator = () -> UUID.randomUUID().toString();
 			}
 
-			database = Objects.requireNonNullElse(database, new DynamoDb(mapper, tables, historyTable, client, idGenerator, batchWriteSize));
+			database = Objects.requireNonNullElse(database, new DynamoDb(mapper, tables, historyTable, client, idGenerator, batchWriteSize, maxRetry));
 
 			return new DynamoDbManager(mapper, idGenerator, client, database);
 		}
