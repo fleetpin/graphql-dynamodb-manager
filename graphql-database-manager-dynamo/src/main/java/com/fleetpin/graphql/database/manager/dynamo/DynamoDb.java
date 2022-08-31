@@ -135,56 +135,65 @@ public class DynamoDb extends DatabaseDriver {
 
     private CompletableFuture<?> conditionalBulkWrite(List<PutValue> items) {
         var transactionWriteItems = items.stream().map(i -> buildTransactionWriteItem(i)).collect(Collectors.toList());
+        if(items.size() == 1) {
+            var item = items.get(0);
+            return put(item.getOrganisationId(), item.getEntity(), item.getCheck()).whenComplete((res, e) -> {
+                if (e == null) {
+                    item.resolve();
+                } else {
+                    item.fail(e);
+                }
+            });
+        }
+        return client.transactWriteItems(builder -> builder.transactItems(transactionWriteItems)).handle((response, error) -> {
+            if (error == null) {
+                items.forEach(i -> {
+                    i.resolve();
+                });
+            } else {
+                if (error instanceof CompletionException && error.getCause() != null) {
+                    error = error.getCause();
+                }
 
-       return client.transactWriteItems(builder -> builder.transactItems(transactionWriteItems)).handle((response, error) -> {
-           if (error == null) {
-               items.forEach(i -> {
-                   i.resolve();
-               });
-           } else {
-               if (error instanceof CompletionException && error.getCause() != null) {
-                   error = error.getCause();
-               }
-
-               if (error instanceof TransactionCanceledException) {
-                   var conditionFailed = ((TransactionCanceledException) error).cancellationReasons().stream().anyMatch(reason -> reason.code().equals("ConditionalCheckFailed"));
-                   if (conditionFailed) {
-                       if (items.size() > 1) {
-                           var all = items
-                                   .stream().map(i ->
-                                           put(i.getOrganisationId(), i.getEntity(), i.getCheck()).whenComplete((res, e) -> {
-                                               if (e == null) {
-                                                   i.resolve();
-                                               } else {
-                                                   i.fail(e);
-                                               }
-                                           })
-                                   ).toArray(CompletableFuture[]::new);
-                           return CompletableFuture.allOf(all);
-                       } else {
-                           for (PutValue i : items) {
-                               i.fail(new RevisionMismatchException(error));
-                           }
-                           return CompletableFuture.completedFuture(null);
-                       }
-                   }
-               }
-               for (PutValue i : items) {
-                   i.fail(error);
-               }
-           }
-           return CompletableFuture.completedFuture(null);
-       }).thenCompose(r -> r).exceptionally(ex -> {
-           items.forEach(i -> i.fail(ex));
-           return null;
-       });
+                if (error instanceof TransactionCanceledException) {
+                    var conditionFailed = ((TransactionCanceledException) error).cancellationReasons().stream().anyMatch(reason -> reason.code().equals("ConditionalCheckFailed"));
+                    if (conditionFailed) {
+                        if (items.size() > 1) {
+                            var all = items
+                                    .stream().map(i ->
+                                    put(i.getOrganisationId(), i.getEntity(), i.getCheck()).whenComplete((res, e) -> {
+                                        if (e == null) {
+                                            i.resolve();
+                                        } else {
+                                            i.fail(e);
+                                        }
+                                    })
+                                            ).toArray(CompletableFuture[]::new);
+                            return CompletableFuture.allOf(all);
+                        } else {
+                            for (PutValue i : items) {
+                                i.fail(new RevisionMismatchException(error));
+                            }
+                            return CompletableFuture.completedFuture(null);
+                        }
+                    }
+                }
+                for (PutValue i : items) {
+                    i.fail(error);
+                }
+            }
+            return CompletableFuture.completedFuture(null);
+        }).thenCompose(r -> r).exceptionally(ex -> {
+            items.forEach(i -> i.fail(ex));
+            return null;
+        });
     }
 
 
     private CompletableFuture<?> nonConditionalBulkWrite(List<PutValue> items) {
         var writeRequests = items.stream().map(i -> buildWriteRequest(i)).collect(Collectors.toList());
-
-        return client.batchWriteItem(builder -> builder.requestItems(Map.of(entityTable, writeRequests))).handle((response, error) -> {
+        var data = Map.of(entityTable, writeRequests);
+        return putItems(0, data).handle((response, error) -> {
             if (error == null) {
                 items.forEach(i -> {
                     i.resolve();
@@ -197,6 +206,24 @@ public class DynamoDb extends DatabaseDriver {
             items.forEach(i -> i.fail(ex));
             return null;
         });
+    }
+
+
+    private CompletableFuture<?> putItems(int count, Map<String, List<WriteRequest>> data) {
+        if(count > 10) {
+            throw new RuntimeException("Failed to get keys from dynamo after 10 attempts");
+        }
+        var delay = CompletableFuture.delayedExecutor(100 * count, TimeUnit.MILLISECONDS);
+        return CompletableFuture.supplyAsync(() -> {
+            return client.batchWriteItem(builder -> builder.requestItems(data)).thenCompose(response -> {
+                if(!response.unprocessedItems().isEmpty()) {
+                    return putItems(count + 1, response.unprocessedItems());
+                }else {
+                    return CompletableFuture.completedFuture(null);
+                }
+
+            });
+        }, delay).thenCompose(t -> t);
     }
 
 
