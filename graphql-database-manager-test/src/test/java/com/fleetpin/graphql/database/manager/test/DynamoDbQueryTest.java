@@ -15,6 +15,7 @@ package com.fleetpin.graphql.database.manager.test;
 import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
+import com.fleetpin.graphql.database.manager.test.annotations.GlobalEnabled;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
@@ -149,6 +150,36 @@ final class DynamoDbQueryTest {
 
 		Assertions.assertEquals("GARRY", entries.get(0).name);
 		Assertions.assertEquals("frank", entries.get(1).name);
+	}
+
+	@TestDatabase
+	void testClimbingGlobalDisabledQuery(
+		@GlobalEnabled(false) @DatabaseNames({ "prod", "stage" }) final Database db,
+		@GlobalEnabled(false) @DatabaseNames("prod") final Database dbProd
+	) throws InterruptedException, ExecutionException {
+		var garry = dbProd.put(new SimpleTable("garry")).get();
+		var garryLocal = new SimpleTable("GARRY");
+		garryLocal.setId(garry.getId());
+		db.put(garryLocal);
+		dbProd.put(new SimpleTable("bob")).get();
+		db.putGlobal(new SimpleTable("frank")).get();
+
+		var entries = db.query(SimpleTable.class).get();
+		Assertions.assertEquals(2, entries.size());
+
+		entries.sort(Comparator.comparing(a -> a.name));
+
+		Assertions.assertEquals("GARRY", entries.get(0).name);
+		Assertions.assertEquals("bob", entries.get(1).name);
+
+		db.delete(entries.get(1), false).get();
+
+		entries = db.query(SimpleTable.class).get();
+		Assertions.assertEquals(1, entries.size());
+
+		entries.sort(Comparator.comparing(a -> a.name));
+
+		Assertions.assertEquals("GARRY", entries.get(0).name);
 	}
 
 	static class SimpleTable extends Table {

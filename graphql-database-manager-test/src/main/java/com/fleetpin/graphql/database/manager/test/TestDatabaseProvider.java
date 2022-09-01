@@ -20,6 +20,7 @@ import com.fleetpin.graphql.database.manager.Database;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
+import com.fleetpin.graphql.database.manager.test.annotations.GlobalEnabled;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import java.lang.reflect.AnnotatedElement;
 import java.util.Arrays;
@@ -127,7 +128,13 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 			}
 		}
 
-		return getDatabaseManager(client, tables, historyTable);
+		final var globalEnabledAnnotation = parameter.getAnnotation(GlobalEnabled.class);
+
+		var globalEnabled = true;
+		if (globalEnabledAnnotation != null) {
+			globalEnabled = globalEnabledAnnotation.value();
+		}
+		return getDatabaseManager(client, tables, historyTable, globalEnabled);
 	}
 
 	private Arguments gatherArguments(final List<Object> argumentsList) {

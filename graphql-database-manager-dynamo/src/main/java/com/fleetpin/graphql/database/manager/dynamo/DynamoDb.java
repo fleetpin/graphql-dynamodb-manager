@@ -49,9 +49,10 @@ public class DynamoDb extends DatabaseDriver {
 	private final Supplier<String> idGenerator;
 	private final int batchWriteSize;
 	private final int maxRetry;
+	private final boolean globalEnabled;
 
 	public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
-		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE, MAX_RETRY);
+		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE, MAX_RETRY, true);
 	}
 
 	public DynamoDb(
@@ -61,7 +62,8 @@ public class DynamoDb extends DatabaseDriver {
 		DynamoDbAsyncClient client,
 		Supplier<String> idGenerator,
 		int batchWriteSize,
-		int maxRetry
+		int maxRetry,
+		boolean globalEnabled
 	) {
 		this.mapper = mapper;
 		this.entityTables = entityTables;
@@ -71,6 +73,7 @@ public class DynamoDb extends DatabaseDriver {
 		this.idGenerator = idGenerator;
 		this.batchWriteSize = batchWriteSize;
 		this.maxRetry = maxRetry;
+		this.globalEnabled = globalEnabled;
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
@@ -386,7 +389,11 @@ public class DynamoDb extends DatabaseDriver {
 
 	@Override
 	public int maxBatchSize() {
-		return 50 / entityTables.size();
+		int size = 100 / entityTables.size();
+		if (globalEnabled) {
+			size = size / 2;
+		}
+		return size;
 	}
 
 	@Override
@@ -401,10 +408,12 @@ public class DynamoDb extends DatabaseDriver {
 				organisation.put("organisationId", AttributeValue.builder().s(key.getOrganisationId()).build());
 				entries.add(organisation);
 			}
-			var global = new HashMap<String, AttributeValue>();
-			global.put("id", value);
-			global.put("organisationId", GLOBAL);
-			entries.add(global);
+			if (globalEnabled) {
+				var global = new HashMap<String, AttributeValue>();
+				global.put("id", value);
+				global.put("organisationId", GLOBAL);
+				entries.add(global);
+			}
 		});
 
 		Map<String, KeysAndAttributes> items = new HashMap<>();
@@ -478,7 +487,13 @@ public class DynamoDb extends DatabaseDriver {
 
 		var futures = entityTables
 			.stream()
-			.flatMap(table -> Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId)))
+			.flatMap(table -> {
+				if (globalEnabled) {
+					return Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId));
+				} else {
+					return Stream.of(Map.entry(table, organisationId));
+				}
+			})
 			.map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
 
 		var future = CompletableFutureUtil.sequence(futures);
