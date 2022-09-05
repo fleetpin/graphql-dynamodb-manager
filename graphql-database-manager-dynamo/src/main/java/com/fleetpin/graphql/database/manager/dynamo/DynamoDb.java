@@ -16,16 +16,21 @@ import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.annotations.Hash;
+import com.fleetpin.graphql.database.manager.annotations.Hash.HashExtractor;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
-import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
+import com.google.common.hash.Hashing;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -50,9 +55,12 @@ public class DynamoDb extends DatabaseDriver {
 	private final int batchWriteSize;
 	private final int maxRetry;
 	private final boolean globalEnabled;
+	private final boolean hash;
+
+	private final ConcurrentHashMap<Class<? extends Table>, Optional<Hash.HashExtractor>> extractorCache = new ConcurrentHashMap<>();
 
 	public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
-		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE, MAX_RETRY, true);
+		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE, MAX_RETRY, true, true);
 	}
 
 	public DynamoDb(
@@ -63,7 +71,8 @@ public class DynamoDb extends DatabaseDriver {
 		Supplier<String> idGenerator,
 		int batchWriteSize,
 		int maxRetry,
-		boolean globalEnabled
+		boolean globalEnabled,
+		boolean hash
 	) {
 		this.mapper = mapper;
 		this.entityTables = entityTables;
@@ -74,18 +83,19 @@ public class DynamoDb extends DatabaseDriver {
 		this.batchWriteSize = batchWriteSize;
 		this.maxRetry = maxRetry;
 		this.globalEnabled = globalEnabled;
+		this.hash = hash;
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
+		if (getExtractor(clazz).isPresent()) {
+			throw new UnsupportedOperationException("hashed types can not be deleted by type");
+		}
 		var ofTypeKey = KeyFactory.createDatabaseQueryKey(organisationId, QueryBuilder.create(clazz).build());
 		var futureItems = query(ofTypeKey);
 		return futureItems.thenCompose(items -> CompletableFutureUtil.sequence(items.stream().map(x -> delete(organisationId, x))));
 	}
 
 	public <T extends Table> CompletableFuture<T> delete(String organisationId, T entity) {
-		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
-		var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
-
 		String sourceOrganisation = getSourceOrganisationId(entity);
 
 		if (!sourceOrganisation.equals(organisationId)) {
@@ -95,9 +105,7 @@ public class DynamoDb extends DatabaseDriver {
 
 		String sourceTable = getSourceTable(entity);
 		if (sourceTable.equals(entityTable)) {
-			Map<String, AttributeValue> key = new HashMap<>();
-			key.put("organisationId", organisationIdAttribute);
-			key.put("id", id);
+			Map<String, AttributeValue> key = mapWithKeys(organisationId, entity);
 
 			return client
 				.deleteItem(request ->
@@ -122,12 +130,17 @@ public class DynamoDb extends DatabaseDriver {
 				)
 				.thenApply(response -> {
 					return entity;
+				})
+				.exceptionally(failure -> {
+					if (failure.getCause() instanceof ConditionalCheckFailedException) {
+						throw new RevisionMismatchException(failure.getCause());
+					}
+					Throwables.throwIfUnchecked(failure);
+					throw new RuntimeException(failure);
 				});
 		} else {
 			//we mark as deleted not actual delete
-			Map<String, AttributeValue> item = new HashMap<>();
-			item.put("organisationId", organisationIdAttribute);
-			item.put("id", id);
+			Map<String, AttributeValue> item = mapWithKeys(organisationId, entity, true);
 			item.put("deleted", AttributeValue.builder().bool(true).build());
 
 			return client
@@ -249,16 +262,24 @@ public class DynamoDb extends DatabaseDriver {
 			.thenCompose(t -> t);
 	}
 
+	@Override
 	public CompletableFuture<Void> bulkPut(List<PutValue> values) {
-		var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), batchWriteSize);
-		var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), batchWriteSize);
+		try {
+			var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), batchWriteSize);
+			var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), batchWriteSize);
 
-		var conditionalFuture = CompletableFuture.allOf(conditional.stream().map(part -> conditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
-		var nonConditionalFuture = CompletableFuture.allOf(
-			nonConditional.stream().map(part -> nonConditionalBulkWrite(part)).toArray(CompletableFuture[]::new)
-		);
+			var conditionalFuture = CompletableFuture.allOf(conditional.stream().map(part -> conditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
+			var nonConditionalFuture = CompletableFuture.allOf(
+				nonConditional.stream().map(part -> nonConditionalBulkWrite(part)).toArray(CompletableFuture[]::new)
+			);
 
-		return CompletableFuture.allOf(conditionalFuture, nonConditionalFuture);
+			return CompletableFuture.allOf(conditionalFuture, nonConditionalFuture);
+		} catch (Exception e) {
+			for (var v : values) {
+				v.fail(e);
+			}
+			return CompletableFuture.completedFuture(null);
+		}
 	}
 
 	private <T extends Table> Map<String, AttributeValue> buildPutEntity(String organisationId, T entity) {
@@ -271,11 +292,8 @@ public class DynamoDb extends DatabaseDriver {
 		}
 		final long revision = entity.getRevision();
 		setUpdatedAt(entity, Instant.now());
-		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
-		var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
-		Map<String, AttributeValue> item = new HashMap<>();
-		item.put("organisationId", organisationIdAttribute);
-		item.put("id", id);
+		Map<String, AttributeValue> item = mapWithKeys(organisationId, entity, true);
+
 		var entries = TableUtil.toAttributes(mapper, entity);
 		entries.remove("revision"); // needs to be at the top level as a limit on dynamo to be able to perform an atomic addition
 		item.put("revision", AttributeValue.builder().n(Long.toString(revision + 1)).build());
@@ -401,17 +419,12 @@ public class DynamoDb extends DatabaseDriver {
 		List<Map<String, AttributeValue>> entries = new ArrayList<>(keys.size() * 2);
 
 		keys.forEach(key -> {
-			AttributeValue value = AttributeValue.builder().s(table(key.getType()) + ":" + key.getId()).build();
 			if (key.getOrganisationId() != null) {
-				var organisation = new HashMap<String, AttributeValue>();
-				organisation.put("id", value);
-				organisation.put("organisationId", AttributeValue.builder().s(key.getOrganisationId()).build());
+				var organisation = mapWithKeys(key.getOrganisationId(), key.getType(), key.getId());
 				entries.add(organisation);
 			}
 			if (globalEnabled) {
-				var global = new HashMap<String, AttributeValue>();
-				global.put("id", value);
-				global.put("organisationId", GLOBAL);
+				var global = mapWithKeys("global", key.getType(), key.getId());
 				entries.add(global);
 			}
 		});
@@ -421,12 +434,11 @@ public class DynamoDb extends DatabaseDriver {
 		for (String table : this.entityTables) {
 			items.put(table, KeysAndAttributes.builder().keys(entries).consistentRead(true).build());
 		}
-
-		return getItems(0, items, new Flattener(false))
+		return getItems(0, items, new Flattener(this.entityTables, false))
 			.thenApply(flattener -> {
 				var toReturn = new ArrayList<T>();
 				for (var key : keys) {
-					var item = flattener.get(key.getType(), key.getId());
+					var item = flattener.get(getExtractor(key.getType()), key.getType(), key.getId());
 					if (item == null) {
 						toReturn.add(null);
 					} else {
@@ -472,6 +484,10 @@ public class DynamoDb extends DatabaseDriver {
 		Class<T> type,
 		TableDataLoader<DatabaseKey<Table>> items
 	) {
+		if (getExtractor(entry.getClass()).isPresent() || getExtractor(type).isPresent()) {
+			throw new UnsupportedOperationException("hashed objects can not be linked");
+		}
+
 		String tableTarget = table(type);
 		var links = getLinks(entry).get(tableTarget);
 		Class<Table> query = (Class<Table>) type;
@@ -481,25 +497,23 @@ public class DynamoDb extends DatabaseDriver {
 
 	@Override
 	public <T extends Table> CompletableFuture<List<T>> query(DatabaseQueryKey<T> key) {
-		var organisationId = AttributeValue.builder().s(key.getOrganisationId()).build();
-		String prefix = Optional.ofNullable(key.getQuery().getStartsWith()).orElse("");
-		var id = AttributeValue.builder().s(table(key.getQuery().getType()) + ":" + prefix).build();
-
 		var futures = entityTables
 			.stream()
 			.flatMap(table -> {
 				if (globalEnabled) {
-					return Stream.of(Map.entry(table, GLOBAL), Map.entry(table, organisationId));
+					return Stream.of(Map.entry(table, "global"), Map.entry(table, key.getOrganisationId()));
 				} else {
-					return Stream.of(Map.entry(table, organisationId));
+					return Stream.of(Map.entry(table, key.getOrganisationId()));
 				}
 			})
-			.map(pair -> query(pair.getKey(), pair.getValue(), id, key.getQuery()));
+			.map(pair -> {
+				return query(pair.getValue(), pair.getKey(), key.getQuery());
+			});
 
 		var future = CompletableFutureUtil.sequence(futures);
 
 		return future.thenApply(results -> {
-			var flattener = new Flattener(false);
+			var flattener = new Flattener(this.entityTables, false);
 
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results(mapper, key.getQuery().getType(), Optional.ofNullable(key.getQuery().getLimit()));
@@ -657,7 +671,7 @@ public class DynamoDb extends DatabaseDriver {
 				);
 		}
 		return future.thenApply(results -> {
-			var flattener = new Flattener(true);
+			var flattener = new Flattener(this.entityTables, true);
 			results.forEach(list -> flattener.addItems(list));
 			return flattener.results(mapper, type);
 		});
@@ -691,6 +705,10 @@ public class DynamoDb extends DatabaseDriver {
 		String value,
 		TableDataLoader<DatabaseKey<Table>> item
 	) {
+		if (getExtractor(type).isPresent()) {
+			throw new UnsupportedOperationException("hashed objects do not support secondary queries");
+		}
+
 		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
 		var id = AttributeValue.builder().s(table(type) + ":" + value).build();
 
@@ -745,34 +763,36 @@ public class DynamoDb extends DatabaseDriver {
 			});
 	}
 
-	private CompletableFuture<List<DynamoItem>> query(String table, AttributeValue organisationId, AttributeValue id, Query<?> query) {
+	private CompletableFuture<List<DynamoItem>> query(String organisationId, String table, Query<?> query) {
+		var keys = mapWithKeys(organisationId, query.getType(), query.getStartsWith());
+		var organisationIdAttribute = keys.get("organisationId");
+		var id = keys.get("id");
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
-		keyConditions.put(":organisationId", organisationId);
-		keyConditions.put(":table", id);
+		keyConditions.put(":organisationId", organisationIdAttribute);
+		if (id != null && !id.s().isEmpty()) {
+			keyConditions.put(":table", id);
+		}
 
 		var s = new DynamoQuerySubscriber(table, query.getLimit());
-
 		client
 			.queryPaginator(r -> {
 				r
 					.tableName(table)
 					.consistentRead(true)
-					.keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)")
 					.expressionAttributeValues(keyConditions)
 					.applyMutation(b -> {
+						if (id == null || id.s().isEmpty()) {
+							b.keyConditionExpression("organisationId = :organisationId");
+						} else {
+							b.keyConditionExpression("organisationId = :organisationId AND begins_with(id, :table)");
+						}
+
 						if (query.getLimit() != null) {
 							b.limit(query.getLimit());
 						}
 
 						if (query.getAfter() != null) {
-							b.exclusiveStartKey(
-								Map.of(
-									"id",
-									AttributeValue.builder().s(TableCoreUtil.table(query.getType()) + ":" + query.getAfter()).build(),
-									"organisationId",
-									organisationId
-								)
-							);
+							b.exclusiveStartKey(mapWithKeys(organisationId, query.getType(), query.getAfter()));
 						}
 					});
 			})
@@ -841,8 +861,8 @@ public class DynamoDb extends DatabaseDriver {
 	private CompletableFuture<List<BackupItem>> takeBackup(String table, AttributeValue organisationId) {
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
 		keyConditions.put(":organisationId", organisationId);
-		var toReturn = new ArrayList<BackupItem>();
-		return client
+		var toReturn = Collections.synchronizedList(new ArrayList<BackupItem>());
+		var future = client
 			.queryPaginator(r ->
 				r.tableName(table).consistentRead(true).keyConditionExpression("organisationId = :organisationId").expressionAttributeValues(keyConditions)
 			)
@@ -852,15 +872,35 @@ public class DynamoDb extends DatabaseDriver {
 					.forEach(item -> {
 						toReturn.add(new DynamoBackupItem(table, item, mapper));
 					});
-			})
-			.thenApply(__ -> {
-				return toReturn;
 			});
+
+		if (this.hash) {
+			var hashFuture = client
+				.queryPaginator(builder ->
+					builder
+						.tableName(entityTable)
+						.keyConditionExpression("originalOrganisationId = :organisationId")
+						.projectionExpression("#item, id, organisationId, hashed, parallelHash, originalOrganisationId, originalId")
+						.expressionAttributeNames(Map.of("#item", "item"))
+						.indexName("originalId")
+						.expressionAttributeValues(keyConditions)
+				)
+				.subscribe(response -> {
+					response
+						.items()
+						.forEach(item -> {
+							toReturn.add(new DynamoBackupItem(table, item, mapper));
+						});
+				});
+			future = future.thenCombine(hashFuture, (__, ___) -> null);
+		}
+
+		return future.thenApply(__ -> toReturn);
 	}
 
 	private CompletableFuture<?> removeLinks(
-		AttributeValue organisationIdAttribute,
-		String fromTable,
+		String organisationId,
+		Class<? extends Table> fromTable,
 		Set<String> fromIds,
 		String targetTable,
 		String targetId
@@ -869,10 +909,7 @@ public class DynamoDb extends DatabaseDriver {
 		var futures = fromIds
 			.stream()
 			.map(fromId -> {
-				var fromIdAttribute = AttributeValue.builder().s(fromTable + ":" + fromId).build();
-				Map<String, AttributeValue> targetKey = new HashMap<>();
-				targetKey.put("organisationId", organisationIdAttribute);
-				targetKey.put("id", fromIdAttribute);
+				Map<String, AttributeValue> targetKey = mapWithKeys(organisationId, fromTable, fromId);
 
 				Map<String, AttributeValue> v = new HashMap<>();
 				v.put(":val", targetIdAttribute);
@@ -895,16 +932,13 @@ public class DynamoDb extends DatabaseDriver {
 		return CompletableFuture.allOf(futures);
 	}
 
-	private CompletableFuture<?> addLinks(AttributeValue organisationIdAttribute, String fromTable, Set<String> fromIds, String targetTable, String targetId) {
+	private CompletableFuture<?> addLinks(String organisationId, Class<? extends Table> fromTable, Set<String> fromIds, String targetTable, String targetId) {
 		var targetIdAttribute = AttributeValue.builder().ss(targetId).build();
 
 		var futures = fromIds
 			.stream()
 			.map(fromId -> {
-				var fromIdAttribute = AttributeValue.builder().s(fromTable + ":" + fromId).build();
-				Map<String, AttributeValue> targetKey = new HashMap<>();
-				targetKey.put("organisationId", organisationIdAttribute);
-				targetKey.put("id", fromIdAttribute);
+				Map<String, AttributeValue> targetKey = mapWithKeys(organisationId, fromTable, fromId);
 
 				Map<String, AttributeValue> v = new HashMap<>();
 				v.put(":val", targetIdAttribute);
@@ -970,12 +1004,15 @@ public class DynamoDb extends DatabaseDriver {
 		return CompletableFuture.allOf(futures);
 	}
 
-	private <T extends Table> CompletableFuture<T> updateEntityLinks(String organisationId, T entity, String targetTable, Collection<String> targetId) {
-		var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
-		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
-		Map<String, AttributeValue> key = new HashMap<>();
-		key.put("organisationId", organisationIdAttribute);
-		key.put("id", id);
+	private <T extends Table> CompletableFuture<T> updateEntityLinks(
+		String organisationId,
+		T entity,
+		Class<? extends Table> targetType,
+		Collection<String> targetId
+	) {
+		Map<String, AttributeValue> key = mapWithKeys(organisationId, entity);
+
+		String targetTable = table(targetType);
 
 		Map<String, String> k = new HashMap<>();
 		k.put("#table", targetTable);
@@ -1071,10 +1108,13 @@ public class DynamoDb extends DatabaseDriver {
 
 	@Override
 	public <T extends Table> CompletableFuture<T> link(String organisationId, T entity, Class<? extends Table> class1, List<String> groupIds) {
-		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
-		String source = table(entity.getClass());
+		if (getExtractor(entity.getClass()).isPresent() || getExtractor(class1).isPresent()) {
+			throw new UnsupportedOperationException("hashed objects can not be linked");
+		}
 
-		String target = table(class1);
+		var source = table(entity.getClass());
+
+		var target = table(class1);
 		var existing = getLinks(entity).get(target);
 
 		var toAdd = new HashSet<>(groupIds);
@@ -1083,15 +1123,15 @@ public class DynamoDb extends DatabaseDriver {
 		var toRemove = new HashSet<>(existing);
 		toRemove.removeAll(groupIds);
 
-		var entityFuture = updateEntityLinks(organisationId, entity, target, groupIds);
+		var entityFuture = updateEntityLinks(organisationId, entity, class1, groupIds);
 
 		return entityFuture.thenCompose(e -> {
 			//wait until the entity has been updated in-case that fails then update the other targets.
 
 			//remove links that have been removed
-			CompletableFuture<?> removeFuture = removeLinks(organisationIdAttribute, target, toRemove, source, entity.getId());
+			CompletableFuture<?> removeFuture = removeLinks(organisationId, class1, toRemove, source, entity.getId());
 			//add the new links
-			CompletableFuture<?> addFuture = addLinks(organisationIdAttribute, target, toAdd, source, entity.getId());
+			CompletableFuture<?> addFuture = addLinks(organisationId, class1, toAdd, source, entity.getId());
 
 			return CompletableFuture
 				.allOf(removeFuture, addFuture)
@@ -1109,6 +1149,10 @@ public class DynamoDb extends DatabaseDriver {
 		final Class<? extends Table> clazz,
 		final String targetId
 	) {
+		if (getExtractor(entity.getClass()).isPresent() || getExtractor(clazz).isPresent()) {
+			throw new UnsupportedOperationException("hashed objects can not be linked");
+		}
+
 		final var updateEntityLinksRequest = createRemoveLinkRequest(organisationId, entity, clazz, targetId);
 
 		return client
@@ -1155,17 +1199,19 @@ public class DynamoDb extends DatabaseDriver {
 
 		final var linksAttributeMap = Map.of("revision", revision, "links", AttributeValueUpdate.builder().action(AttributeAction.PUT).value(linkMap).build());
 
-		final Map<String, AttributeValue> entityItem = Map.of(
-			"organisationId",
-			AttributeValue.builder().s(organisationId).build(),
-			"id",
-			AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build()
-		);
+		final Map<String, AttributeValue> entityItem = mapWithKeys(organisationId, entity);
 
 		return UpdateItemRequest.builder().tableName(entityTable).key(entityItem).attributeUpdates(linksAttributeMap).build();
 	}
 
 	public <T extends Table> CompletableFuture<T> deleteLinks(String organisationId, T entity) {
+		if (getLinks(entity).isEmpty()) {
+			return CompletableFuture.completedFuture(entity);
+		}
+		if (getExtractor(entity.getClass()).isPresent()) {
+			throw new UnsupportedOperationException("hashed objects can not be linked");
+		}
+
 		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
 		var id = AttributeValue.builder().s(table(entity.getClass()) + ":" + entity.getId()).build();
 		//we first clear out our own object
@@ -1253,69 +1299,155 @@ public class DynamoDb extends DatabaseDriver {
 
 	@Override
 	public CompletableFuture<Boolean> destroyOrganisation(final String organisationId) {
-		final var organisationCondition = Condition
-			.builder()
-			.comparisonOperator(ComparisonOperator.EQ)
-			.attributeValueList(AttributeValue.builder().s(organisationId).build())
-			.build();
+		var keys = Collections.synchronizedList(new ArrayList<Map<String, AttributeValue>>());
 
-		final var associatedOrganisationItems = QueryRequest
-			.builder()
-			.tableName(entityTable)
-			.keyConditions(Map.of("organisationId", organisationCondition))
-			.build();
+		var future = client
+			.queryPaginator(builder ->
+				builder
+					.tableName(entityTable)
+					.projectionExpression("id, organisationId")
+					.keyConditionExpression("organisationId = :organisationId")
+					.expressionAttributeValues(Map.of(":organisationId", AttributeValue.builder().s(organisationId).build()))
+			)
+			.subscribe(response -> {
+				keys.addAll(response.items());
+			});
+		if (this.hash) {
+			var hashFuture = client
+				.queryPaginator(builder ->
+					builder
+						.tableName(entityTable)
+						.projectionExpression("id, organisationId")
+						.keyConditionExpression("originalOrganisationId = :organisationId")
+						.indexName("originalId")
+						.expressionAttributeValues(Map.of(":organisationId", AttributeValue.builder().s(organisationId).build()))
+				)
+				.subscribe(response -> {
+					keys.addAll(response.items());
+				});
+			future = future.thenCombine(hashFuture, (__, ___) -> null);
+		}
 
-		final var deletedOrganisationFuture = new CompletableFuture<Boolean>();
+		var delete = future.thenCompose(__ -> {
+			if (keys.isEmpty()) {
+				return CompletableFuture.completedFuture(null);
+			}
 
-		client
-			.query(associatedOrganisationItems)
-			.thenApply(response -> {
-				if (!response.hasItems()) {
-					deletedOrganisationFuture.complete(false);
-					return Stream.<CompletableFuture<BatchWriteItemResponse>>empty();
-				}
+			var all = Lists
+				.partition(
+					keys
+						.stream()
+						.map(item -> {
+							final var deleteRequest = DeleteRequest.builder().key(item).build();
+							return WriteRequest.builder().deleteRequest(deleteRequest).build();
+						})
+						.collect(Collectors.toList()),
+					BATCH_WRITE_SIZE
+				)
+				.stream()
+				.map(deleteRequestBatch -> {
+					return putItems(0, Map.of(entityTable, deleteRequestBatch));
+				})
+				.toArray(CompletableFuture[]::new);
+			return CompletableFuture.allOf(all);
+		});
 
-				return Lists
-					.partition(
-						response
-							.items()
-							.stream()
-							.map(item -> {
-								final var deleteRequest = DeleteRequest
-									.builder()
-									.key(Map.of("organisationId", item.get("organisationId"), "id", item.get("id")))
-									.build();
-
-								return WriteRequest.builder().deleteRequest(deleteRequest).build();
-							})
-							.collect(Collectors.toList()),
-						BATCH_WRITE_SIZE
-					)
-					.stream()
-					.map(deleteRequestBatch -> {
-						final var batchDeleteItemRequest = BatchWriteItemRequest.builder().requestItems(Map.of(entityTable, deleteRequestBatch)).build();
-
-						return client.batchWriteItem(batchDeleteItemRequest);
-					});
-			})
-			.thenAccept(futures ->
-				futures
-					.map(future -> future.thenApply(response -> response.unprocessedItems().size() > 0))
-					.reduce((a, b) -> a.thenCombine(b, (aBoolean, bBoolean) -> aBoolean || bBoolean))
-					.ifPresentOrElse(
-						future ->
-							future.thenAccept(failure -> {
-								deletedOrganisationFuture.complete(!failure);
-							}),
-						() -> deletedOrganisationFuture.complete(false)
-					)
-			);
-
-		return deletedOrganisationFuture;
+		return delete.thenApply(__ -> true);
 	}
 
 	@Override
 	public String newId() {
 		return idGenerator.get();
+	}
+
+	private <T extends Table> Map<String, AttributeValue> mapWithKeys(String organisationId, T entity) {
+		return mapWithKeys(organisationId, entity.getClass(), entity.getId());
+	}
+
+	private <T extends Table> Map<String, AttributeValue> mapWithKeys(String organisationId, T entity, boolean addHash) {
+		return mapWithKeys(organisationId, entity.getClass(), entity.getId(), addHash);
+	}
+
+	private <T extends Table> Map<String, AttributeValue> mapWithKeys(String organisationId, Class<T> type, String id) {
+		return mapWithKeys(organisationId, type, id, false);
+	}
+
+	private <T extends Table> Optional<HashExtractor> getExtractor(Class<T> type) {
+		if (!hash) {
+			return Optional.empty();
+		}
+		return extractorCache.computeIfAbsent(
+			type,
+			t -> {
+				Class<?> tmp = t;
+				Hash hash = null;
+				while (hash == null && tmp != null) {
+					hash = tmp.getDeclaredAnnotation(Hash.class);
+					tmp = tmp.getSuperclass();
+				}
+				if (hash == null) {
+					return Optional.empty();
+				} else {
+					try {
+						return Optional.of(hash.value().getConstructor().newInstance());
+					} catch (ReflectiveOperationException e) {
+						throw new RuntimeException("Unable to build hash extractor", e);
+					}
+				}
+			}
+		);
+	}
+
+	private <T extends Table> Map<String, AttributeValue> mapWithKeys(String organisationId, Class<T> type, final String id, boolean addHash) {
+		Map<String, AttributeValue> item = new HashMap<>();
+
+		var hashExtractor = getExtractor(type);
+		if (hashExtractor.isPresent()) {
+			if (id == null) {
+				throw new RuntimeException("No id or startswith specified to calculate hash");
+			}
+			var hashSuffix = hashExtractor.get().hashId(id);
+			var sortId = hashExtractor.get().sortId(id);
+			var organisationIdAttribute = AttributeValue.builder().s(organisationId + ":" + table(type) + ":" + hashSuffix).build();
+			var idAttribute = AttributeValue.builder().s(sortId).build();
+			item.put("organisationId", organisationIdAttribute);
+			if (!id.isEmpty()) {
+				item.put("id", idAttribute);
+			}
+			if (addHash) {
+				item.put("hashed", AttributeValue.builder().bool(true).build());
+				item.put("parallelHash", AttributeValue.builder().s(parallelHash(id)).build());
+
+				item.put("originalOrganisationId", AttributeValue.builder().s(organisationId).build());
+
+				var originalIdAttribute = AttributeValue.builder().s(table(type) + ":" + id).build();
+
+				item.put("originalId", originalIdAttribute);
+			}
+			return item;
+		}
+
+		var organisationIdAttribute = AttributeValue.builder().s(organisationId).build();
+		var tmpId = id;
+		if (tmpId == null) {
+			tmpId = "";
+		}
+		var idAttribute = AttributeValue.builder().s(table(type) + ":" + tmpId).build();
+		item.put("organisationId", organisationIdAttribute);
+		item.put("id", idAttribute);
+
+		if (addHash && hash) {
+			item.put("parallelHash", AttributeValue.builder().s(parallelHash(tmpId)).build());
+		}
+		return item;
+	}
+
+	@VisibleForTesting
+	protected static String parallelHash(String id) {
+		String empty = "00000000";
+		var hash = Hashing.murmur3_32().hashString(id, StandardCharsets.UTF_8);
+		var bits = hash.asInt() & 0xFF;
+		var toReturn = Integer.toBinaryString(bits);
+		return empty.substring(0, empty.length() - toReturn.length()) + toReturn;
 	}
 }

@@ -23,13 +23,24 @@ public class HistoryUtil {
 			})
 			.map(newImage -> {
 				var item = new HashMap<>(newImage);
-				var id = newImage.get("id").s().split(":", 2);
+				var organisationId = newImage.get("organisationId").s();
+				var idWithType = newImage.get("id").s();
+				var hashed = item.get("hashed");
+				if (hashed != null && hashed.bool()) {
+					var split = organisationId.indexOf(':');
+					var typeIndex = organisationId.indexOf(':', split + 1);
+					idWithType = organisationId.substring(split + 1, typeIndex) + ":" + newImage.get("item").m().get("id").s();
+					organisationId = organisationId.substring(0, split);
+				}
+
+				var id = idWithType.split(":", 2);
 				var idRevision = toRevisionId(id[1], Long.parseLong(newImage.get("revision").n()));
 
-				item.put("id", newImage.get("id"));
+				item.put("id", AttributeValue.builder().s(idWithType).build());
+				item.remove("hashed");
 				item.put("idRevision", idRevision);
-				item.put("organisationId", newImage.get("organisationId"));
-				item.put("organisationIdType", AttributeValue.builder().s(newImage.get("organisationId").s() + ":" + id[0]).build());
+				item.put("organisationId", AttributeValue.builder().s(organisationId).build());
+				item.put("organisationIdType", AttributeValue.builder().s(organisationId + ":" + id[0]).build());
 
 				var updatedAtTime = Instant.parse(newImage.get("item").m().get("updatedAt").s()).toEpochMilli();
 				var idDate = toRevisionId(id[1], updatedAtTime);

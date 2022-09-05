@@ -56,6 +56,7 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 
 		final var testMethod = extensionContext.getRequiredTestMethod();
 		final var organisationId = testMethod.getAnnotation(TestDatabase.class).organisationId();
+		final var hashed = testMethod.getAnnotation(TestDatabase.class).hashed();
 
 		final var withHistory = Arrays
 			.stream(testMethod.getParameters())
@@ -69,11 +70,11 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 			.map(parameter -> {
 				try {
 					if (parameter.getType().isAssignableFrom(DynamoDbManager.class)) {
-						return createDynamoDbManager(client, streamClient, parameter, withHistory);
+						return createDynamoDbManager(client, streamClient, parameter, withHistory, hashed);
 					} else if (parameter.getType().isAssignableFrom(HistoryProcessor.class)) {
 						return new HistoryProcessor(client, streamClient, parameter, organisationId);
 					} else {
-						return createDatabase(client, streamClient, parameter, organisationId, withHistory);
+						return createDatabase(client, streamClient, parameter, organisationId, withHistory, hashed);
 					}
 				} catch (final Exception e) {
 					e.printStackTrace();
@@ -97,12 +98,13 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 		final DynamoDbStreamsAsyncClient streamClient,
 		final AnnotatedElement parameter,
 		final String organisationId,
-		final boolean withHistory
+		final boolean withHistory,
+		final boolean hashed
 	) throws ExecutionException, InterruptedException {
 		final var databaseOrganisation = parameter.getAnnotation(DatabaseOrganisation.class);
 		final var correctOrganisationId = databaseOrganisation != null ? databaseOrganisation.value() : organisationId;
 
-		final var dynamoDbManager = createDynamoDbManager(client, streamClient, parameter, withHistory);
+		final var dynamoDbManager = createDynamoDbManager(client, streamClient, parameter, withHistory, hashed);
 
 		return getEmbeddedDatabase(dynamoDbManager, correctOrganisationId, finished);
 	}
@@ -111,7 +113,8 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 		final DynamoDbAsyncClient client,
 		final DynamoDbStreamsAsyncClient streamClient,
 		final AnnotatedElement parameter,
-		final boolean withHistory
+		final boolean withHistory,
+		final boolean hashed
 	) throws ExecutionException, InterruptedException {
 		final var databaseNames = parameter.getAnnotation(DatabaseNames.class);
 		var tables = databaseNames != null ? databaseNames.value() : new String[] { "table" };
@@ -134,7 +137,8 @@ public final class TestDatabaseProvider implements ArgumentsProvider {
 		if (globalEnabledAnnotation != null) {
 			globalEnabled = globalEnabledAnnotation.value();
 		}
-		return getDatabaseManager(client, tables, historyTable, globalEnabled);
+
+		return getDatabaseManager(client, tables, historyTable, globalEnabled, hashed);
 	}
 
 	private Arguments gatherArguments(final List<Object> argumentsList) {

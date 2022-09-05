@@ -10,28 +10,22 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager.util;
+package com.fleetpin.graphql.database.manager.annotations;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.collect.HashMultimap;
-import java.util.Map;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
-public interface BackupItem {
-	String getTable();
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 
-	Map<String, JsonNode> getItem();
+@Retention(RUNTIME)
+@Target(ElementType.TYPE)
+public @interface Hash {
+	Class<? extends HashExtractor> value();
 
-	HashMultimap<String, String> getLinks();
+	public interface HashExtractor {
+		public String hashId(String id);
 
-	String getId();
-
-	String getOrganisationId();
-
-	String getParallelHash();
-
-	String getOriginalOrganisationId();
-
-	String getOriginalId();
-
-	boolean isHashed();
+		public String sortId(String id);
+	}
 }

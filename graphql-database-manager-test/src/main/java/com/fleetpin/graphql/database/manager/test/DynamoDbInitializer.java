@@ -12,12 +12,6 @@
 
 package com.fleetpin.graphql.database.manager.test;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.client.builder.AwsClientBuilder;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreams;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClient;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClientBuilder;
 import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 import com.fleetpin.graphql.database.manager.Database;
@@ -52,12 +46,22 @@ final class DynamoDbInitializer {
 						KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build()
 					)
 					.streamSpecification(streamSpecification -> streamSpecification.streamEnabled(true).streamViewType(StreamViewType.NEW_IMAGE))
-					.globalSecondaryIndexes(builder ->
-						builder
-							.indexName("secondaryGlobal")
-							.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L))
-							.projection(b -> b.projectionType(ProjectionType.ALL))
-							.keySchema(KeySchemaElement.builder().attributeName("secondaryGlobal").keyType(KeyType.HASH).build())
+					.globalSecondaryIndexes(
+						builder ->
+							builder
+								.indexName("secondaryGlobal")
+								.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L))
+								.projection(b -> b.projectionType(ProjectionType.ALL))
+								.keySchema(KeySchemaElement.builder().attributeName("secondaryGlobal").keyType(KeyType.HASH).build()),
+						builder ->
+							builder
+								.indexName("originalId")
+								.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L))
+								.projection(b -> b.projectionType(ProjectionType.KEYS_ONLY))
+								.keySchema(
+									KeySchemaElement.builder().attributeName("originalOrganisationId").keyType(KeyType.HASH).build(),
+									KeySchemaElement.builder().attributeName("originalId").keyType(KeyType.RANGE).build()
+								)
 					)
 					.localSecondaryIndexes(builder ->
 						builder
@@ -72,7 +76,9 @@ final class DynamoDbInitializer {
 						AttributeDefinition.builder().attributeName("organisationId").attributeType(ScalarAttributeType.S).build(),
 						AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
 						AttributeDefinition.builder().attributeName("secondaryGlobal").attributeType(ScalarAttributeType.S).build(),
-						AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build()
+						AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build(),
+						AttributeDefinition.builder().attributeName("originalOrganisationId").attributeType(ScalarAttributeType.S).build(),
+						AttributeDefinition.builder().attributeName("originalId").attributeType(ScalarAttributeType.S).build()
 					)
 					.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
 			)
@@ -162,8 +168,14 @@ final class DynamoDbInitializer {
 		return database;
 	}
 
-	static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final String[] tables, String historyTable, boolean globalEnabled) {
-		return DynamoDbManager.builder().tables(tables).dynamoDbAsyncClient(client).historyTable(historyTable).global(globalEnabled).build();
+	static DynamoDbManager getDatabaseManager(
+		final DynamoDbAsyncClient client,
+		final String[] tables,
+		String historyTable,
+		boolean globalEnabled,
+		boolean hashed
+	) {
+		return DynamoDbManager.builder().tables(tables).dynamoDbAsyncClient(client).historyTable(historyTable).global(globalEnabled).hash(hashed).build();
 	}
 	//    static Database getInMemoryDatabase(
 	//            final String organisationId,

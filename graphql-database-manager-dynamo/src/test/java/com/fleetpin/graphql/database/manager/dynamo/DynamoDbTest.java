@@ -10,28 +10,20 @@
  * the License.
  */
 
-package com.fleetpin.graphql.database.manager.util;
+package com.fleetpin.graphql.database.manager.dynamo;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.collect.HashMultimap;
-import java.util.Map;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public interface BackupItem {
-	String getTable();
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
 
-	Map<String, JsonNode> getItem();
+public class DynamoDbTest {
 
-	HashMultimap<String, String> getLinks();
-
-	String getId();
-
-	String getOrganisationId();
-
-	String getParallelHash();
-
-	String getOriginalOrganisationId();
-
-	String getOriginalId();
-
-	boolean isHashed();
+	@Test
+	public void testParallelHash() {
+		assertEquals("00000000", DynamoDb.parallelHash(""));
+		assertEquals("11000011", DynamoDb.parallelHash("1234"));
+		assertEquals("00010111", DynamoDb.parallelHash("2"));
+		assertEquals(8, DynamoDb.parallelHash(UUID.randomUUID().toString()).length());
+	}
 }

@@ -117,6 +117,15 @@ public class TableUtil {
 			entries.put("links", AttributeValue.builder().m(linkMap).build());
 		}
 
+		if (entity.isHashed()) {
+			entries.put("hashed", AttributeValue.builder().bool(true).build());
+			entries.put("originalId", AttributeValue.builder().s(entity.getOriginalId()).build());
+			entries.put("originalOrganisationId", AttributeValue.builder().s(entity.getOriginalOrganisationId()).build());
+		}
+		if (entity.getParallelHash() != null) {
+			entries.put("parallelHash", AttributeValue.builder().s(entity.getParallelHash()).build());
+		}
+
 		ObjectNode tree = mapper.valueToTree(entityItem);
 
 		Iterator<Entry<String, JsonNode>> fields = tree.fields();

@@ -12,6 +12,8 @@
 
 package com.fleetpin.graphql.database.manager.dynamo;
 
+import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -30,6 +32,10 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 
 	private HashMultimap<String, String> links;
 	private String organisationId;
+	private boolean hashed;
+	private String parallelHash;
+	private String originalOrganisationId;
+	private String originalId;
 
 	public DynamoBackupItem() {}
 
@@ -52,6 +58,24 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 		this.id = item.get("id").s();
 
 		this.organisationId = item.get("organisationId").s();
+
+		var hashed = item.get("hashed");
+		var parallelHash = item.get("parallelHash");
+		var originalOrganisationId = item.get("originalOrganisationId");
+		var originalId = item.get("originalId");
+
+		if (hashed != null) {
+			this.hashed = hashed.bool().booleanValue();
+		}
+		if (parallelHash != null) {
+			this.parallelHash = hashed.s();
+		}
+		if (originalOrganisationId != null) {
+			this.originalOrganisationId = originalOrganisationId.s();
+		}
+		if (originalId != null) {
+			this.originalId = originalId.s();
+		}
 	}
 
 	public String getTable() {
@@ -67,6 +91,7 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 		return links;
 	}
 
+	@Override
 	public String getId() {
 		return id;
 	}
@@ -76,7 +101,28 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 		return getId().compareTo(o.getId());
 	}
 
+	@Override
 	public String getOrganisationId() {
 		return organisationId;
+	}
+
+	@Override
+	public boolean isHashed() {
+		return hashed;
+	}
+
+	@Override
+	public String getOriginalId() {
+		return originalId;
+	}
+
+	@Override
+	public String getOriginalOrganisationId() {
+		return originalOrganisationId;
+	}
+
+	@Override
+	public String getParallelHash() {
+		return parallelHash;
 	}
 }

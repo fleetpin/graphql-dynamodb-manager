@@ -43,9 +43,19 @@ public class DynamoItem implements Comparable<DynamoItem> {
 					this.links.putAll(t, value.ss());
 				});
 		}
-		this.id = item.get("id").s();
+		var id = item.get("id").s();
 
-		this.organisationId = item.get("organisationId").s();
+		var organisationId = item.get("organisationId").s();
+
+		var hashed = item.get("hashed");
+		if (hashed != null && hashed.bool()) {
+			var split = organisationId.indexOf(":");
+			this.id = organisationId.substring(split + 1) + "\t" + id; // not a real id used anywhere but is consistent for flattener
+			this.organisationId = organisationId.substring(0, split);
+		} else {
+			this.id = id;
+			this.organisationId = organisationId;
+		}
 	}
 
 	public boolean isDeleted() {
@@ -68,7 +78,7 @@ public class DynamoItem implements Comparable<DynamoItem> {
 			if (revision != null) {
 				t.setRevision(Long.parseLong(revision.n()));
 			}
-			TableAccess.setTableSource(t, this.table, links, item.get("organisationId").s());
+			TableAccess.setTableSource(t, this.table, links, organisationId);
 		}
 		return table;
 	}

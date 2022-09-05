@@ -14,6 +14,7 @@ package com.fleetpin.graphql.database.manager.dynamo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.annotations.Hash;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -23,21 +24,12 @@ public final class Flattener {
 
 	private final Map<String, DynamoItem> lookup;
 	private final boolean includeOrganisationId;
+	private final List<String> tables;
 
-	Flattener(boolean includeOrganisationId) {
+	Flattener(List<String> tables, boolean includeOrganisationId) {
+		this.tables = tables;
 		lookup = new HashMap<>();
 		this.includeOrganisationId = includeOrganisationId;
-	}
-
-	public void add(String table, List<Map<String, AttributeValue>> list) {
-		list.forEach(item -> {
-			var i = new DynamoItem(table, item);
-			if (i.isDeleted()) {
-				lookup.remove(getId(i));
-			} else {
-				lookup.merge(getId(i), i, this::merge);
-			}
-		});
 	}
 
 	private String getId(DynamoItem item) {
@@ -48,21 +40,45 @@ public final class Flattener {
 		}
 	}
 
-	public DynamoItem get(Class<? extends Table> type, String id) {
-		return lookup.get(TableCoreUtil.table(type) + ":" + id);
+	public DynamoItem get(Optional<Hash.HashExtractor> extractor, Class<? extends Table> type, String id) {
+		String key;
+		if (extractor.isPresent()) {
+			key = TableCoreUtil.table(type) + ":" + extractor.get().hashId(id) + "\t" + extractor.get().sortId(id);
+		} else {
+			key = TableCoreUtil.table(type) + ":" + id;
+		}
+		var got = this.lookup.get(key);
+		if (got != null && got.isDeleted()) {
+			return null;
+		} else {
+			return got;
+		}
 	}
 
 	public void addItems(List<DynamoItem> list) {
 		list.forEach(item -> {
-			if (item.isDeleted()) {
-				lookup.remove(getId(item));
-			} else {
-				lookup.merge(getId(item), item, this::merge);
-			}
+			addItem(item);
 		});
 	}
 
-	public DynamoItem merge(DynamoItem existing, DynamoItem replace) {
+	public void add(String table, List<Map<String, AttributeValue>> list) {
+		list.forEach(item -> {
+			var i = new DynamoItem(table, item);
+			addItem(i);
+		});
+	}
+
+	private void addItem(DynamoItem item) {
+		lookup.merge(getId(item), item, this::merge);
+	}
+
+	private DynamoItem merge(DynamoItem existing, DynamoItem replace) {
+		if (tables.indexOf(existing.getTable()) > tables.indexOf(replace.getTable())) {
+			var tmp = existing;
+			existing = replace;
+			replace = tmp;
+		}
+
 		var item = new HashMap<>(replace.getItem());
 		//only links in parent
 		if (item.get("item") == null) {
