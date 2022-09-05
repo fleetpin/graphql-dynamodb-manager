@@ -162,8 +162,8 @@ final class DynamoDbInitializer {
 		return database;
 	}
 
-	static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final String[] tables, String historyTable) {
-		return DynamoDbManager.builder().tables(tables).dynamoDbAsyncClient(client).historyTable(historyTable).build();
+	static DynamoDbManager getDatabaseManager(final DynamoDbAsyncClient client, final String[] tables, String historyTable, boolean globalEnabled) {
+		return DynamoDbManager.builder().tables(tables).dynamoDbAsyncClient(client).historyTable(historyTable).global(globalEnabled).build();
 	}
 	//    static Database getInMemoryDatabase(
 	//            final String organisationId,

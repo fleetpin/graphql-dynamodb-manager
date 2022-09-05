@@ -17,6 +17,7 @@ import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
+import com.fleetpin.graphql.database.manager.test.annotations.GlobalEnabled;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -68,6 +69,25 @@ final class DynamoDbPutGetDeleteTest {
 		entry1 = db.get(SimpleTable.class, id).get();
 		Assertions.assertEquals("garry", entry1.getName());
 		Assertions.assertEquals(id, entry1.getId());
+	}
+
+	@TestDatabase
+	void testGlobalDisabledPutGetDelete(@GlobalEnabled(false) final Database db, @GlobalEnabled(false) final Database dbProd)
+		throws InterruptedException, ExecutionException {
+		SimpleTable entry1 = new SimpleTable("garry");
+		entry1 = db.putGlobal(entry1).get();
+		Assertions.assertEquals("garry", entry1.getName());
+		Assertions.assertNotNull(entry1.getId());
+
+		String id = entry1.getId();
+
+		entry1 = db.get(SimpleTable.class, id).get();
+
+		Assertions.assertNull(entry1);
+
+		entry1 = dbProd.get(SimpleTable.class, id).get();
+
+		Assertions.assertNull(entry1);
 	}
 
 	@TestDatabase
