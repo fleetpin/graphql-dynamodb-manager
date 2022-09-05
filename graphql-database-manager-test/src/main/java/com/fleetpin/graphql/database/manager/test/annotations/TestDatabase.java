@@ -26,4 +26,6 @@ import org.junit.jupiter.params.provider.ArgumentsSource;
 @ArgumentsSource(TestDatabaseProvider.class)
 public @interface TestDatabase {
 	String organisationId() default "organisation";
+
+	boolean hashed() default false;
 }
