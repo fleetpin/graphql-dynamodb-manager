@@ -26,8 +26,14 @@ public abstract class Table {
 	private long revision;
 	private Instant createdAt;
 	private Instant updatedAt;
+
+	@JsonIgnore
 	private String sourceTable;
+
+	@JsonIgnore
 	private String sourceOrganistaionId;
+
+	@JsonIgnore
 	private HashMultimap<String, String> links = HashMultimap.create();
 
 	@Id

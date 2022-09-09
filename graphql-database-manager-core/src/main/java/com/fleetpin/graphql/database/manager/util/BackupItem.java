@@ -29,9 +29,5 @@ public interface BackupItem {
 
 	String getParallelHash();
 
-	String getOriginalOrganisationId();
-
-	String getOriginalId();
-
 	boolean isHashed();
 }

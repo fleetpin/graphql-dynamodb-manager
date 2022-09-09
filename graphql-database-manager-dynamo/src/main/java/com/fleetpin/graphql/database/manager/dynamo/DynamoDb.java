@@ -15,19 +15,40 @@ package com.fleetpin.graphql.database.manager.dynamo;
 import static com.fleetpin.graphql.database.manager.util.TableCoreUtil.table;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fleetpin.graphql.database.manager.*;
+import com.fleetpin.graphql.database.manager.DatabaseDriver;
+import com.fleetpin.graphql.database.manager.DatabaseKey;
+import com.fleetpin.graphql.database.manager.DatabaseQueryHistoryKey;
+import com.fleetpin.graphql.database.manager.DatabaseQueryKey;
+import com.fleetpin.graphql.database.manager.KeyFactory;
+import com.fleetpin.graphql.database.manager.PutValue;
+import com.fleetpin.graphql.database.manager.Query;
+import com.fleetpin.graphql.database.manager.QueryBuilder;
+import com.fleetpin.graphql.database.manager.RevisionMismatchException;
+import com.fleetpin.graphql.database.manager.Table;
+import com.fleetpin.graphql.database.manager.TableDataLoader;
 import com.fleetpin.graphql.database.manager.annotations.Hash;
 import com.fleetpin.graphql.database.manager.annotations.Hash.HashExtractor;
+import com.fleetpin.graphql.database.manager.annotations.HashLocator;
+import com.fleetpin.graphql.database.manager.annotations.HashLocator.HashQueryBuilder;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.fleetpin.graphql.database.manager.util.CompletableFutureUtil;
 import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
+import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.hash.Hashing;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,14 +56,27 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.reflections.Reflections;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
-import software.amazon.awssdk.services.dynamodb.model.*;
+import software.amazon.awssdk.services.dynamodb.model.AttributeAction;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValueUpdate;
+import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.DeleteRequest;
+import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
+import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
 public class DynamoDb extends DatabaseDriver {
 
 	private static final AttributeValue REVISION_INCREMENT = AttributeValue.builder().n("1").build();
-	private static final AttributeValue GLOBAL = AttributeValue.builder().s("global").build();
 	private static final int BATCH_WRITE_SIZE = 25;
 	private static final int MAX_RETRY = 10;
 
@@ -59,8 +93,10 @@ public class DynamoDb extends DatabaseDriver {
 
 	private final ConcurrentHashMap<Class<? extends Table>, Optional<Hash.HashExtractor>> extractorCache = new ConcurrentHashMap<>();
 
+	private final Map<String, HashQueryBuilder> hashKeyExpander;
+
 	public DynamoDb(ObjectMapper mapper, List<String> entityTables, DynamoDbAsyncClient client, Supplier<String> idGenerator) {
-		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE, MAX_RETRY, true, true);
+		this(mapper, entityTables, null, client, idGenerator, BATCH_WRITE_SIZE, MAX_RETRY, true, true, null);
 	}
 
 	public DynamoDb(
@@ -72,7 +108,8 @@ public class DynamoDb extends DatabaseDriver {
 		int batchWriteSize,
 		int maxRetry,
 		boolean globalEnabled,
-		boolean hash
+		boolean hash,
+		String classPath
 	) {
 		this.mapper = mapper;
 		this.entityTables = entityTables;
@@ -84,6 +121,34 @@ public class DynamoDb extends DatabaseDriver {
 		this.maxRetry = maxRetry;
 		this.globalEnabled = globalEnabled;
 		this.hash = hash;
+
+		if (classPath != null) {
+			var tableObjects = new Reflections(classPath).getSubTypesOf(Table.class);
+
+			this.hashKeyExpander = new HashMap<>();
+
+			for (var obj : tableObjects) {
+				HashLocator hashLocator = null;
+				Class<?> tmp = obj;
+				while (hashLocator == null && tmp != null) {
+					hashLocator = tmp.getDeclaredAnnotation(HashLocator.class);
+					tmp = tmp.getSuperclass();
+				}
+				if (hashLocator != null) {
+					try {
+						HashQueryBuilder locator = hashLocator.value().getConstructor().newInstance();
+						var old = hashKeyExpander.put(TableCoreUtil.table(obj), locator);
+						if (old != null && !old.getClass().equals(obj.getClass())) {
+							throw new RuntimeException("Duplicate table name " + obj + " " + old);
+						}
+					} catch (ReflectiveOperationException e) {
+						throw new RuntimeException(e);
+					}
+				}
+			}
+		} else {
+			hashKeyExpander = null;
+		}
 	}
 
 	public <T extends Table> CompletableFuture<List<T>> delete(String organisationId, Class<T> clazz) {
@@ -859,8 +924,16 @@ public class DynamoDb extends DatabaseDriver {
 	}
 
 	private CompletableFuture<List<BackupItem>> takeBackup(String table, AttributeValue organisationId) {
+		if (hash && hashKeyExpander == null) {
+			throw new UnsupportedOperationException("To perform backups on hashed databases must specify hashLocators");
+		}
+
 		Map<String, AttributeValue> keyConditions = new HashMap<>();
+
+		List<CompletableFuture<Void>> hashAdds = new ArrayList<>();
+
 		keyConditions.put(":organisationId", organisationId);
+
 		var toReturn = Collections.synchronizedList(new ArrayList<BackupItem>());
 		var future = client
 			.queryPaginator(r ->
@@ -870,30 +943,36 @@ public class DynamoDb extends DatabaseDriver {
 				response
 					.items()
 					.forEach(item -> {
+						if (this.hash) {
+							var id = item.get("id").s();
+							var type = id.substring(0, id.indexOf(':'));
+							var expander = this.hashKeyExpander.get(type);
+							if (expander != null) {
+								var extra = expander.extractHashQueries(id.substring(id.indexOf(':') + 1));
+								for (var query : extra) {
+									var typeName = TableCoreUtil.table(query.getType());
+
+									var key = organisationId.s() + ":" + typeName + ":" + query.getHashId();
+									var hashFuture = client
+										.queryPaginator(builder ->
+											builder
+												.tableName(entityTable)
+												.keyConditionExpression("organisationId = :organisationId")
+												.expressionAttributeValues(Map.of(":organisationId", AttributeValue.builder().s(key).build()))
+										)
+										.subscribe(hashResponse -> {
+											hashResponse.items().forEach(i -> toReturn.add(new DynamoBackupItem(table, i, mapper)));
+										});
+									hashAdds.add(hashFuture);
+								}
+							}
+						}
+
 						toReturn.add(new DynamoBackupItem(table, item, mapper));
 					});
 			});
 
-		if (this.hash) {
-			var hashFuture = client
-				.queryPaginator(builder ->
-					builder
-						.tableName(entityTable)
-						.keyConditionExpression("originalOrganisationId = :organisationId")
-						.projectionExpression("#item, id, organisationId, hashed, parallelHash, originalOrganisationId, originalId")
-						.expressionAttributeNames(Map.of("#item", "item"))
-						.indexName("originalId")
-						.expressionAttributeValues(keyConditions)
-				)
-				.subscribe(response -> {
-					response
-						.items()
-						.forEach(item -> {
-							toReturn.add(new DynamoBackupItem(table, item, mapper));
-						});
-				});
-			future = future.thenCombine(hashFuture, (__, ___) -> null);
-		}
+		future = future.thenCompose(__ -> CompletableFuture.allOf(hashAdds.toArray(CompletableFuture[]::new)));
 
 		return future.thenApply(__ -> toReturn);
 	}
@@ -1299,8 +1378,13 @@ public class DynamoDb extends DatabaseDriver {
 
 	@Override
 	public CompletableFuture<Boolean> destroyOrganisation(final String organisationId) {
+		if (hash && hashKeyExpander == null) {
+			throw new UnsupportedOperationException("To destoryOrganisations on hashed databases must specify hashLocators");
+		}
+
 		var keys = Collections.synchronizedList(new ArrayList<Map<String, AttributeValue>>());
 
+		List<CompletableFuture<Void>> hashDeletes = new ArrayList<>();
 		var future = client
 			.queryPaginator(builder ->
 				builder
@@ -1310,23 +1394,42 @@ public class DynamoDb extends DatabaseDriver {
 					.expressionAttributeValues(Map.of(":organisationId", AttributeValue.builder().s(organisationId).build()))
 			)
 			.subscribe(response -> {
+				if (this.hash) {
+					for (var item : response.items()) {
+						var id = item.get("id").s();
+						var type = id.substring(0, id.indexOf(':'));
+						var expander = this.hashKeyExpander.get(type);
+						if (expander != null) {
+							var extra = expander.extractHashQueries(id.substring(id.indexOf(':') + 1));
+							for (var query : extra) {
+								var typeName = TableCoreUtil.table(query.getType());
+
+								var hashFuture = client
+									.queryPaginator(builder ->
+										builder
+											.tableName(entityTable)
+											.projectionExpression("id, organisationId")
+											.keyConditionExpression("organisationId = :organisationId")
+											.expressionAttributeValues(
+												Map.of(
+													":organisationId",
+													AttributeValue.builder().s(organisationId + ":" + typeName + ":" + query.getHashId()).build()
+												)
+											)
+									)
+									.subscribe(hashResponse -> {
+										keys.addAll(hashResponse.items());
+									});
+								hashDeletes.add(hashFuture);
+							}
+						}
+					}
+				}
+
 				keys.addAll(response.items());
 			});
-		if (this.hash) {
-			var hashFuture = client
-				.queryPaginator(builder ->
-					builder
-						.tableName(entityTable)
-						.projectionExpression("id, organisationId")
-						.keyConditionExpression("originalOrganisationId = :organisationId")
-						.indexName("originalId")
-						.expressionAttributeValues(Map.of(":organisationId", AttributeValue.builder().s(organisationId).build()))
-				)
-				.subscribe(response -> {
-					keys.addAll(response.items());
-				});
-			future = future.thenCombine(hashFuture, (__, ___) -> null);
-		}
+
+		future = future.thenCompose(__ -> CompletableFuture.allOf(hashDeletes.toArray(CompletableFuture[]::new)));
 
 		var delete = future.thenCompose(__ -> {
 			if (keys.isEmpty()) {
@@ -1417,12 +1520,6 @@ public class DynamoDb extends DatabaseDriver {
 			if (addHash) {
 				item.put("hashed", AttributeValue.builder().bool(true).build());
 				item.put("parallelHash", AttributeValue.builder().s(parallelHash(id)).build());
-
-				item.put("originalOrganisationId", AttributeValue.builder().s(organisationId).build());
-
-				var originalIdAttribute = AttributeValue.builder().s(table(type) + ":" + id).build();
-
-				item.put("originalId", originalIdAttribute);
 			}
 			return item;
 		}

@@ -52,16 +52,7 @@ final class DynamoDbInitializer {
 								.indexName("secondaryGlobal")
 								.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L))
 								.projection(b -> b.projectionType(ProjectionType.ALL))
-								.keySchema(KeySchemaElement.builder().attributeName("secondaryGlobal").keyType(KeyType.HASH).build()),
-						builder ->
-							builder
-								.indexName("originalId")
-								.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L))
-								.projection(b -> b.projectionType(ProjectionType.KEYS_ONLY))
-								.keySchema(
-									KeySchemaElement.builder().attributeName("originalOrganisationId").keyType(KeyType.HASH).build(),
-									KeySchemaElement.builder().attributeName("originalId").keyType(KeyType.RANGE).build()
-								)
+								.keySchema(KeySchemaElement.builder().attributeName("secondaryGlobal").keyType(KeyType.HASH).build())
 					)
 					.localSecondaryIndexes(builder ->
 						builder
@@ -76,9 +67,7 @@ final class DynamoDbInitializer {
 						AttributeDefinition.builder().attributeName("organisationId").attributeType(ScalarAttributeType.S).build(),
 						AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
 						AttributeDefinition.builder().attributeName("secondaryGlobal").attributeType(ScalarAttributeType.S).build(),
-						AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build(),
-						AttributeDefinition.builder().attributeName("originalOrganisationId").attributeType(ScalarAttributeType.S).build(),
-						AttributeDefinition.builder().attributeName("originalId").attributeType(ScalarAttributeType.S).build()
+						AttributeDefinition.builder().attributeName("secondaryOrganisation").attributeType(ScalarAttributeType.S).build()
 					)
 					.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L).build())
 			)
@@ -173,9 +162,18 @@ final class DynamoDbInitializer {
 		final String[] tables,
 		String historyTable,
 		boolean globalEnabled,
-		boolean hashed
+		boolean hashed,
+		String classpath
 	) {
-		return DynamoDbManager.builder().tables(tables).dynamoDbAsyncClient(client).historyTable(historyTable).global(globalEnabled).hash(hashed).build();
+		return DynamoDbManager
+			.builder()
+			.tables(tables)
+			.dynamoDbAsyncClient(client)
+			.historyTable(historyTable)
+			.global(globalEnabled)
+			.hash(hashed)
+			.classPath(classpath)
+			.build();
 	}
 	//    static Database getInMemoryDatabase(
 	//            final String organisationId,

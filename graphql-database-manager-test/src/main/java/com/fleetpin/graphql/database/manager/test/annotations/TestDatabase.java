@@ -28,4 +28,6 @@ public @interface TestDatabase {
 	String organisationId() default "organisation";
 
 	boolean hashed() default false;
+
+	String classPath() default "";
 }
