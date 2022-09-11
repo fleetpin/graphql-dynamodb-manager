@@ -119,8 +119,6 @@ public class TableUtil {
 
 		if (entity.isHashed()) {
 			entries.put("hashed", AttributeValue.builder().bool(true).build());
-			entries.put("originalId", AttributeValue.builder().s(entity.getOriginalId()).build());
-			entries.put("originalOrganisationId", AttributeValue.builder().s(entity.getOriginalOrganisationId()).build());
 		}
 		if (entity.getParallelHash() != null) {
 			entries.put("parallelHash", AttributeValue.builder().s(entity.getParallelHash()).build());

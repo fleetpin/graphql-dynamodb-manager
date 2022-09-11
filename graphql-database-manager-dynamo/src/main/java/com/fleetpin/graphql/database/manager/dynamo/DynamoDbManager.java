@@ -23,6 +23,7 @@ import com.fasterxml.jackson.module.paramnames.ParameterNamesModule;
 import com.fleetpin.graphql.database.manager.DatabaseDriver;
 import com.fleetpin.graphql.database.manager.DatabaseManager;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,7 @@ public final class DynamoDbManager extends DatabaseManager {
 		private int maxRetry = 10;
 		private boolean globalEnabled = true;
 		private boolean hash = false;
+		private String classPath = null;
 
 		public DyanmoDbManagerBuilder dynamoDbAsyncClient(DynamoDbAsyncClient client) {
 			this.client = client;
@@ -120,6 +122,13 @@ public final class DynamoDbManager extends DatabaseManager {
 			return this;
 		}
 
+		public DyanmoDbManagerBuilder classPath(String classPath) {
+			if (!Strings.isNullOrEmpty(classPath)) {
+				this.classPath = classPath;
+			}
+			return this;
+		}
+
 		public DynamoDbManager build() {
 			Preconditions.checkNotNull(tables, "Tables must be set");
 			Preconditions.checkArgument(!tables.isEmpty(), "Empty table array");
@@ -147,7 +156,7 @@ public final class DynamoDbManager extends DatabaseManager {
 			database =
 				Objects.requireNonNullElse(
 					database,
-					new DynamoDb(mapper, tables, historyTable, client, idGenerator, batchWriteSize, maxRetry, globalEnabled, hash)
+					new DynamoDb(mapper, tables, historyTable, client, idGenerator, batchWriteSize, maxRetry, globalEnabled, hash, classPath)
 				);
 
 			return new DynamoDbManager(mapper, idGenerator, client, database);

@@ -20,8 +20,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.Table;
 import com.fleetpin.graphql.database.manager.annotations.GlobalIndex;
 import com.fleetpin.graphql.database.manager.annotations.Hash;
+import com.fleetpin.graphql.database.manager.annotations.HashLocator;
+import com.fleetpin.graphql.database.manager.annotations.HashLocator.HashQuery;
+import com.fleetpin.graphql.database.manager.annotations.HashLocator.HashQueryBuilder;
 import com.fleetpin.graphql.database.manager.annotations.SecondaryIndex;
-import com.fleetpin.graphql.database.manager.dynamo.DynamoBackupItem;
 import com.fleetpin.graphql.database.manager.dynamo.DynamoDbManager;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
@@ -31,28 +33,26 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import org.junit.jupiter.api.Assertions;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 final class DynamoDbBackupTest {
 
-	private ObjectMapper mapper = new ObjectMapper();
-
-	@TestDatabase(hashed = true)
+	@TestDatabase(hashed = true, classPath = "com.fleetpin.graphql.database.manager.test.hashed")
 	void testTakeBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
 		final var db0 = dynamoDbManager.getDatabase("organisation-0");
 		final var db1 = dynamoDbManager.getDatabase("organisation-1");
 		db0.start(new CompletableFuture<>());
 		db1.start(new CompletableFuture<>());
 
-		final var putAvocado = db0.put(new SimpleTable("avocado", "fruit")).get();
-		final var putBanana = db0.put(new SimpleTable("banana", "fruit")).get();
+		final var putAvocado = db0.put(new SimpleTable("Beer:avocado", "fruit")).get();
+		final var putBanana = db0.put(new SimpleTable("Beer:banana", "fruit")).get();
 		final var putBeer = db0.put(new Drink("Beer", true)).get();
-		final var putTomato = db1.put(new SimpleTable("tomato", "fruit")).get();
+		db1.put(new Drink("Beer", true)).get();
+		final var putTomato = db1.put(new SimpleTable("Beer:tomato", "fruit")).get();
 
 		final var orgQuery1 = db0.takeBackup("organisation-0").get();
 		Assertions.assertNotNull(putAvocado);
 		Assertions.assertNotNull(putBanana);
-		Assertions.assertTrue(orgQuery1.size() == 3);
+		Assertions.assertEquals(3, orgQuery1.size());
 		List<String> names = List.of(putBeer.getName(), putBanana.getName(), putAvocado.getName());
 
 		checkResponseNameField(orgQuery1, 0, names);
@@ -61,20 +61,21 @@ final class DynamoDbBackupTest {
 
 		final var orgQuery2 = db1.takeBackup("organisation-1").get();
 		Assertions.assertNotNull(putTomato);
-		checkResponseNameField(orgQuery2, 0, List.of(putTomato.getName()));
+		checkResponseNameField(orgQuery2, 0, List.of(putBeer.getName(), putTomato.getName()));
 	}
 
-	@TestDatabase(hashed = true)
+	@TestDatabase(hashed = true, classPath = "com.fleetpin.graphql.database.manager.test.hashed")
 	void testRestoreBackup(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
 		final var db0 = dynamoDbManager.getDatabase("organisation-0");
 		final var db1 = dynamoDbManager.getDatabase("organisation-1");
 		db0.start(new CompletableFuture<>());
 		db1.start(new CompletableFuture<>());
 
-		final var putAvocado = db0.put(new SimpleTable("avocado", "fruit")).get();
-		final var putBanana = db0.put(new SimpleTable("banana", "fruit")).get();
+		final var putAvocado = db0.put(new SimpleTable("Beer:avocado", "fruit")).get();
+		final var putBanana = db0.put(new SimpleTable("Beer:banana", "fruit")).get();
 		final var putBeer = db0.put(new Drink("Beer", true)).get();
-		final var putTomato = db1.put(new SimpleTable("tomato", "fruit")).get();
+		db1.put(new Drink("Beer", true)).get();
+		final var putTomato = db1.put(new SimpleTable("Beer:tomato", "fruit")).get();
 
 		final var orgQuery1 = db0.takeBackup("organisation-0").get();
 		final var orgQuery2 = db1.takeBackup("organisation-1").get();
@@ -100,17 +101,17 @@ final class DynamoDbBackupTest {
 		final var simpleTableExists = db0.get(SimpleTable.class, putAvocado.getId()).get();
 		Assertions.assertNotNull(simpleTableExists);
 
-		Assertions.assertEquals("avocado", simpleTableExists.getName());
+		Assertions.assertEquals("Beer:avocado", simpleTableExists.getName());
 		Assertions.assertEquals("fruit", simpleTableExists.getGlobalLookup());
 	}
 
 	@TestDatabase(hashed = true)
 	void testDeleteItems(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
 		final var db0 = dynamoDbManager.getDatabase("organisation-0");
-		assertThrows(UnsupportedOperationException.class, () -> db0.delete("organisation-0", Drink.class));
+		assertThrows(UnsupportedOperationException.class, () -> db0.delete("organisation-0", SimpleTable.class));
 	}
 
-	@TestDatabase(hashed = true)
+	@TestDatabase(hashed = true, classPath = "com.fleetpin.graphql.database.manager.test.hashed")
 	void testBatchDestroyOrganisation(final DynamoDbManager dynamoDbManager) throws ExecutionException, InterruptedException {
 		final var db0 = dynamoDbManager.getDatabase("organisation-0");
 		final var db1 = dynamoDbManager.getDatabase("organisation-1");
@@ -147,7 +148,7 @@ final class DynamoDbBackupTest {
 		Assertions.assertTrue(names.contains(((HashMap<String, Object>) itemMap.get("item")).get("name")));
 	}
 
-	@Hash(SimplerHasher.class)
+	@HashLocator(DrinkHashLocator.class)
 	public static class Drink extends Table {
 
 		private String name;
@@ -156,6 +157,7 @@ final class DynamoDbBackupTest {
 		public Drink() {}
 
 		public Drink(String name, Boolean alcoholic) {
+			this.setId(name);
 			this.name = name;
 			this.alcoholic = alcoholic;
 		}
@@ -178,6 +180,7 @@ final class DynamoDbBackupTest {
 		public SimpleTable() {}
 
 		public SimpleTable(String name, String globalLookup) {
+			this.setId(name);
 			this.name = name;
 			this.globalLookup = globalLookup;
 		}
@@ -190,6 +193,16 @@ final class DynamoDbBackupTest {
 		@GlobalIndex
 		public String getGlobalLookup() {
 			return globalLookup;
+		}
+	}
+
+	public static class DrinkHashLocator implements HashQueryBuilder {
+
+		final SimplerHasher hasher = new SimplerHasher();
+
+		@Override
+		public List<HashQuery> extractHashQueries(String id) {
+			return List.of(new HashQuery(SimpleTable.class, hasher.hashId(id)));
 		}
 	}
 }

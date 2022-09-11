@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fleetpin.graphql.database.manager.util.BackupItem;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Multimap;
 import java.util.Map;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -34,8 +33,6 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 	private String organisationId;
 	private boolean hashed;
 	private String parallelHash;
-	private String originalOrganisationId;
-	private String originalId;
 
 	public DynamoBackupItem() {}
 
@@ -61,20 +58,12 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 
 		var hashed = item.get("hashed");
 		var parallelHash = item.get("parallelHash");
-		var originalOrganisationId = item.get("originalOrganisationId");
-		var originalId = item.get("originalId");
 
 		if (hashed != null) {
 			this.hashed = hashed.bool().booleanValue();
 		}
 		if (parallelHash != null) {
-			this.parallelHash = hashed.s();
-		}
-		if (originalOrganisationId != null) {
-			this.originalOrganisationId = originalOrganisationId.s();
-		}
-		if (originalId != null) {
-			this.originalId = originalId.s();
+			this.parallelHash = parallelHash.s();
 		}
 	}
 
@@ -109,16 +98,6 @@ public class DynamoBackupItem implements Comparable<DynamoBackupItem>, BackupIte
 	@Override
 	public boolean isHashed() {
 		return hashed;
-	}
-
-	@Override
-	public String getOriginalId() {
-		return originalId;
-	}
-
-	@Override
-	public String getOriginalOrganisationId() {
-		return originalOrganisationId;
 	}
 
 	@Override
