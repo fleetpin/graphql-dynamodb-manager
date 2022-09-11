@@ -46,13 +46,12 @@ final class DynamoDbInitializer {
 						KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build()
 					)
 					.streamSpecification(streamSpecification -> streamSpecification.streamEnabled(true).streamViewType(StreamViewType.NEW_IMAGE))
-					.globalSecondaryIndexes(
-						builder ->
-							builder
-								.indexName("secondaryGlobal")
-								.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L))
-								.projection(b -> b.projectionType(ProjectionType.ALL))
-								.keySchema(KeySchemaElement.builder().attributeName("secondaryGlobal").keyType(KeyType.HASH).build())
+					.globalSecondaryIndexes(builder ->
+						builder
+							.indexName("secondaryGlobal")
+							.provisionedThroughput(p -> p.readCapacityUnits(10L).writeCapacityUnits(10L))
+							.projection(b -> b.projectionType(ProjectionType.ALL))
+							.keySchema(KeySchemaElement.builder().attributeName("secondaryGlobal").keyType(KeyType.HASH).build())
 					)
 					.localSecondaryIndexes(builder ->
 						builder

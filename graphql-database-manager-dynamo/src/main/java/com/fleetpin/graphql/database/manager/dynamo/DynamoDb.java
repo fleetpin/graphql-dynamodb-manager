@@ -217,70 +217,20 @@ public class DynamoDb extends DatabaseDriver {
 	}
 
 	private CompletableFuture<?> conditionalBulkWrite(List<PutValue> items) {
-		var transactionWriteItems = items.stream().map(i -> buildTransactionWriteItem(i)).collect(Collectors.toList());
-		if (items.size() == 1) {
-			var item = items.get(0);
-			return put(item.getOrganisationId(), item.getEntity(), item.getCheck())
-				.whenComplete((res, e) -> {
-					if (e == null) {
-						item.resolve();
-					} else {
-						item.fail(e);
-					}
-				});
-		}
-		return client
-			.transactWriteItems(builder -> builder.transactItems(transactionWriteItems))
-			.handle((response, error) -> {
-				if (error == null) {
-					items.forEach(i -> {
-						i.resolve();
-					});
-				} else {
-					if (error instanceof CompletionException && error.getCause() != null) {
-						error = error.getCause();
-					}
-
-					if (error instanceof TransactionCanceledException) {
-						var conditionFailed =
-							((TransactionCanceledException) error).cancellationReasons()
-								.stream()
-								.anyMatch(reason -> reason.code().equals("ConditionalCheckFailed"));
-						if (conditionFailed) {
-							if (items.size() > 1) {
-								var all = items
-									.stream()
-									.map(i ->
-										put(i.getOrganisationId(), i.getEntity(), i.getCheck())
-											.whenComplete((res, e) -> {
-												if (e == null) {
-													i.resolve();
-												} else {
-													i.fail(e);
-												}
-											})
-									)
-									.toArray(CompletableFuture[]::new);
-								return CompletableFuture.allOf(all);
-							} else {
-								for (PutValue i : items) {
-									i.fail(new RevisionMismatchException(error));
-								}
-								return CompletableFuture.completedFuture(null);
-							}
+		var all = items
+			.stream()
+			.map(i ->
+				put(i.getOrganisationId(), i.getEntity(), i.getCheck())
+					.whenComplete((res, e) -> {
+						if (e == null) {
+							i.resolve();
+						} else {
+							i.fail(e);
 						}
-					}
-					for (PutValue i : items) {
-						i.fail(error);
-					}
-				}
-				return CompletableFuture.completedFuture(null);
-			})
-			.thenCompose(r -> r)
-			.exceptionally(ex -> {
-				items.forEach(i -> i.fail(ex));
-				return null;
-			});
+					})
+			)
+			.toArray(CompletableFuture[]::new);
+		return CompletableFuture.allOf(all);
 	}
 
 	private CompletableFuture<?> nonConditionalBulkWrite(List<PutValue> items) {
@@ -347,7 +297,7 @@ public class DynamoDb extends DatabaseDriver {
 		}
 	}
 
-	private <T extends Table> Map<String, AttributeValue> buildPutEntity(String organisationId, T entity) {
+	public <T extends Table> Map<String, AttributeValue> buildPutEntity(String organisationId, T entity) {
 		if (entity.getId() == null) {
 			entity.setId(idGenerator.get());
 			setCreatedAt(entity, Instant.now());
@@ -391,41 +341,6 @@ public class DynamoDb extends DatabaseDriver {
 			item.put("secondaryOrganisation", index);
 		}
 		return item;
-	}
-
-	public TransactWriteItem buildTransactionWriteItem(PutValue value) {
-		final long revision = value.getEntity().getRevision();
-		String sourceTable = getSourceTable(value.getEntity());
-		var item = buildPutEntity(value.getOrganisationId(), value.getEntity());
-
-		return TransactWriteItem
-			.builder()
-			.put(builder ->
-				builder
-					.tableName(entityTable)
-					.item(item)
-					.applyMutation(conditional -> {
-						if (value.getCheck()) {
-							String sourceOrganisationId = getSourceOrganisationId(value.getEntity());
-
-							if (
-								sourceTable != null &&
-								!sourceTable.equals(entityTable) ||
-								!sourceOrganisationId.equals(value.getOrganisationId()) ||
-								revision == 0
-							) { //we confirm row does not exist with a revision since entry might predate feature
-								conditional.conditionExpression("attribute_not_exists(revision)");
-							} else {
-								Map<String, AttributeValue> variables = new HashMap<>();
-								variables.put(":revision", AttributeValue.builder().n(Long.toString(revision)).build());
-								//check exists and matches revision
-								conditional.expressionAttributeValues(variables);
-								conditional.conditionExpression("revision = :revision");
-							}
-						}
-					})
-			)
-			.build();
 	}
 
 	public WriteRequest buildWriteRequest(PutValue value) {
