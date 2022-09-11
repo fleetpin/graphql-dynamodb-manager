@@ -5,7 +5,7 @@
     <parent>
         <groupId>com.fleetpin</groupId>
         <artifactId>graphql-database-manager</artifactId>
-        <version>0.2.28-SNAPSHOT</version>
+        <version>0.2.28</version>
     </parent>
 
     <artifactId>graphql-database-manager-test</artifactId>
@@ -40,7 +40,7 @@
         <url>https://github.com/fleetpin/graphql-dynamodb-manager</url>
         <connection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</connection>
         <developerConnection>scm:git:https://github.com/fleetpin/graphql-dynamodb-manager.git</developerConnection>
-      <tag>HEAD</tag>
+      <tag>graphql-database-manager-0.2.28</tag>
   </scm>
 
     <licenses>
