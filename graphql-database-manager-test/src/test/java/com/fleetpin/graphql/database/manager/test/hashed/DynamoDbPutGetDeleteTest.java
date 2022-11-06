@@ -20,8 +20,15 @@ import com.fleetpin.graphql.database.manager.test.annotations.DatabaseNames;
 import com.fleetpin.graphql.database.manager.test.annotations.DatabaseOrganisation;
 import com.fleetpin.graphql.database.manager.test.annotations.GlobalEnabled;
 import com.fleetpin.graphql.database.manager.test.annotations.TestDatabase;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
+
 import org.junit.jupiter.api.Assertions;
 
 final class DynamoDbPutGetDeleteTest {
@@ -257,6 +264,38 @@ final class DynamoDbPutGetDeleteTest {
 		Assertions.assertEquals("bob", entry2Future.get().getName());
 	}
 
+	
+	@TestDatabase(hashed = true)
+	void testLotsOfDataPerPartition(final Database db) throws InterruptedException, ExecutionException {
+		
+//putting 400 entries split across 4 partitions
+		
+		var futures = new ArrayList<CompletableFuture<?>>();
+		
+		List<String> ids = new ArrayList<>();
+		
+		List<String> expected = new ArrayList<>();
+		
+		for(int i = 0; i < 400; i++) {
+			SimpleTable entry = new SimpleTable("id" + i);
+			entry.setId("###" + (i / 100) + ":" + i);
+			ids.add(entry.getId());
+			expected.add(entry.getName());
+			futures.add(db.put(entry, false));
+		}
+		
+		for(var f: futures) {
+			f.join();
+		}
+		
+		var get = db.get(SimpleTable.class, ids).get();
+		
+		var actual = get.stream().map(t -> t.getName()).collect(Collectors.toList());
+		
+		Assertions.assertEquals(expected, actual);
+	}
+	
+	
 	@Hash(SimplerHasher.class)
 	static class SimpleTable extends Table {
 

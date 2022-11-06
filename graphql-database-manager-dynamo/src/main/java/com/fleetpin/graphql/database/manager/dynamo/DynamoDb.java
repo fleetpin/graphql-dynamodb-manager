@@ -36,6 +36,7 @@ import com.fleetpin.graphql.database.manager.util.HistoryCoreUtil;
 import com.fleetpin.graphql.database.manager.util.TableCoreUtil;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.hash.Hashing;
 import java.nio.charset.StandardCharsets;
@@ -45,12 +46,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -69,8 +70,6 @@ import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest.Builder;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
-import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
-import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
@@ -232,8 +231,8 @@ public class DynamoDb extends DatabaseDriver {
 			.toArray(CompletableFuture[]::new);
 		return CompletableFuture.allOf(all);
 	}
-
-	private CompletableFuture<?> nonConditionalBulkWrite(List<PutValue> items) {
+	
+	private CompletableFuture<?> nonConditionalBulkPutChunk(List<PutValue> items) {
 		var writeRequests = items.stream().map(i -> buildWriteRequest(i)).collect(Collectors.toList());
 		var data = Map.of(entityTable, writeRequests);
 		return putItems(0, data)
@@ -252,6 +251,60 @@ public class DynamoDb extends DatabaseDriver {
 				items.forEach(i -> i.fail(ex));
 				return null;
 			});
+	}
+
+	private CompletableFuture<?> nonConditionalBulkWrite(List<PutValue> items) {
+		
+		
+		if(items.isEmpty()) {
+			return CompletableFuture.completedFuture(null);
+		}
+		if(items.size() > batchWriteSize) {
+		
+			ArrayListMultimap<String, PutValue> byPartition = ArrayListMultimap.create();
+			items.stream().forEach(t -> {
+				var key = mapWithKeys(t.getOrganisationId(), t.getEntity());
+				byPartition.put(key.get("organisationId").s(), t);
+			});
+			
+			var futures = byPartition.keySet().stream().map(key -> {
+				var partition = byPartition.get(key);
+				
+				var toReturn = new CompletableFuture();
+				sendBackToBack(toReturn, Lists.partition(partition, batchWriteSize).iterator());
+				return toReturn;
+			}).toArray(CompletableFuture[]::new);
+			
+			return CompletableFuture.allOf(futures);
+		}else {
+			return nonConditionalBulkPutChunk(items);
+		}
+	}
+
+	private void sendBackToBack(CompletableFuture<?> atEnd, Iterator<List<PutValue>> it) {
+		
+		nonConditionalBulkPutChunk(it.next()).whenComplete((response, error) -> {
+			
+			if(error != null) {
+				while(it.hasNext()) {
+					var f = it.next();
+					for(var e: f) {
+						e.fail(error);
+					}
+				}
+				atEnd.completeExceptionally(error);
+			}else {
+				if(it.hasNext()) {
+					sendBackToBack(atEnd, it);
+				}else {
+					atEnd.complete(null);
+				}
+				
+				
+			}
+			
+		});
+		
 	}
 
 	private CompletableFuture<?> putItems(int count, Map<String, List<WriteRequest>> data) {
@@ -281,13 +334,12 @@ public class DynamoDb extends DatabaseDriver {
 	public CompletableFuture<Void> bulkPut(List<PutValue> values) {
 		try {
 			var conditional = Lists.partition(values.stream().filter(v -> v.getCheck()).collect(Collectors.toList()), batchWriteSize);
-			var nonConditional = Lists.partition(values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList()), batchWriteSize);
+			var nonConditional = values.stream().filter(v -> !v.getCheck()).collect(Collectors.toList());
 
 			var conditionalFuture = CompletableFuture.allOf(conditional.stream().map(part -> conditionalBulkWrite(part)).toArray(CompletableFuture[]::new));
-			var nonConditionalFuture = CompletableFuture.allOf(
-				nonConditional.stream().map(part -> nonConditionalBulkWrite(part)).toArray(CompletableFuture[]::new)
-			);
-
+			
+			var nonConditionalFuture = nonConditionalBulkWrite(nonConditional);
+			
 			return CompletableFuture.allOf(conditionalFuture, nonConditionalFuture);
 		} catch (Exception e) {
 			for (var v : values) {
